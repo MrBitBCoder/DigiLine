@@ -1,0 +1,6 @@
+@DigiLine_HostAddress = http://localhost:5232
+
+GET {{DigiLine_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
