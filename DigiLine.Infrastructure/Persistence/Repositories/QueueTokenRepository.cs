@@ -1,6 +1,7 @@
 ﻿using DigiLine.Application.Queue;
 using DigiLine.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -34,6 +35,8 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
         {
             var connection = _dbContext.Database.GetDbConnection();
 
+            var transaction = _dbContext.Database.CurrentTransaction;
+           
             await using var command = connection.CreateCommand();
 
             command.CommandText = """
@@ -52,6 +55,12 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
             {
                 await connection.OpenAsync(cancellationToken);
             }
+
+            if (transaction is not null)
+            {
+                command.Transaction = transaction.GetDbTransaction();
+            }
+
 
             var result = await command.ExecuteScalarAsync(cancellationToken);
 

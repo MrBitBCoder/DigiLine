@@ -3,9 +3,11 @@ using DigiLine.Application.Common.Interfaces;
 using DigiLine.Application.Patients;
 using DigiLine.Application.Queue;
 using DigiLine.Application.Sessions;
+using DigiLine.Application.Transactions;
 using DigiLine.Infrastructure.Common.Services;
 using DigiLine.Infrastructure.Persistence;
 using DigiLine.Infrastructure.Persistence.Repositories;
+using DigiLine.Infrastructure.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,6 +42,9 @@ namespace DigiLine.Infrastructure
             services.AddScoped<IQueueTokenRepository, QueueTokenRepository>();
 
             services.AddScoped<ITokenNumberService, TokenNumberService>();
+
+            services.AddScoped<ITransactionManager, EfTransactionManager>();
+
 
             return services;
         }

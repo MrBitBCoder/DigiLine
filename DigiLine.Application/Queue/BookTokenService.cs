@@ -1,5 +1,6 @@
 ﻿using DigiLine.Application.Patients;
 using DigiLine.Application.Sessions;
+using DigiLine.Application.Transactions;
 using DigiLine.Domain.Common;
 using DigiLine.Domain.Entities;
 using System;
@@ -16,17 +17,21 @@ namespace DigiLine.Application.Queue
         private readonly IQueueTokenRepository _queueTokenRepository;
         private readonly ISessionRepository _sessionRepository;
         private readonly IPatientProfileRepository _patientProfileRepository;
+        private readonly ITransactionManager _transactionManager;
+
 
         public BookTokenService(
             ITokenNumberService tokenNumberService,
             IQueueTokenRepository queueTokenRepository,
             ISessionRepository sessionRepository,
-            IPatientProfileRepository patientProfileRepository)
+            IPatientProfileRepository patientProfileRepository,
+             ITransactionManager transactionManager)
         {
             _tokenNumberService = tokenNumberService;
             _queueTokenRepository = queueTokenRepository;
             _sessionRepository = sessionRepository;
             _patientProfileRepository = patientProfileRepository;
+            _transactionManager = transactionManager;
         }
 
         public async Task<int> BookAsync(
@@ -68,6 +73,10 @@ namespace DigiLine.Application.Queue
                     "Patient profile was not found.");
             }
 
+            await using var transaction =
+                await _transactionManager.BeginAsync(
+                    cancellationToken);
+
 
             var tokenNumber =
                 await _tokenNumberService.GetNextTokenNumberAsync(
@@ -84,6 +93,9 @@ namespace DigiLine.Application.Queue
                 cancellationToken);
 
             await _queueTokenRepository.SaveChangesAsync(
+                 cancellationToken);
+
+            await transaction.CommitAsync(
                 cancellationToken);
 
             return tokenNumber;
