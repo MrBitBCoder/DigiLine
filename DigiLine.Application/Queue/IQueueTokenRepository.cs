@@ -22,6 +22,12 @@ namespace DigiLine.Application.Queue
             Guid tokenId,
             CancellationToken cancellationToken = default);
 
+        Task<QueueToken?> GetActiveByPatientAsync(
+            Guid sessionId,
+            Guid patientProfileId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         Task<int?> GetMaximumTokenNumberAsync(
             Guid sessionId,
             CancellationToken cancellationToken = default);

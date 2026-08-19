@@ -2,7 +2,7 @@ namespace DigiLine.Application.Queue;
 
 public enum QueueEventType
 {
-    TokenCreated = 1,
+    TokenBooked = 1,
     TokenCalled = 2,
     TokenRecalled = 3,
     TokenSkipped = 4,
@@ -10,5 +10,6 @@ public enum QueueEventType
     TokenCancelled = 6,
     TokenMarkedLate = 7,
     SessionPaused = 8,
-    SessionResumed = 9
+    SessionResumed = 9,
+    WalkInCreated = 10
 }

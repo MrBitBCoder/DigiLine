@@ -7,12 +7,15 @@ public sealed class SignalRQueueEventPublisher : IQueueEventPublisher
 {
     private readonly IHubContext<QueueHub> _hubContext;
     private readonly ILogger<SignalRQueueEventPublisher> _logger;
+    private readonly IHubContext<PublicQueueHub> _publicHubContext;
 
     public SignalRQueueEventPublisher(
         IHubContext<QueueHub> hubContext,
+        IHubContext<PublicQueueHub> publicHubContext,
         ILogger<SignalRQueueEventPublisher> logger)
     {
         _hubContext = hubContext;
+        _publicHubContext = publicHubContext;
         _logger = logger;
     }
 
@@ -27,6 +30,12 @@ public sealed class SignalRQueueEventPublisher : IQueueEventPublisher
                 .SendAsync(
                     QueueHubContract.QueueChanged,
                     queueEvent,
+                    cancellationToken);
+            await _publicHubContext.Clients
+                .Group(PublicQueueHub.PublicSessionGroup(queueEvent.SessionId))
+                .SendAsync(
+                    QueueHubContract.QueueChanged,
+                    new { queueEvent.SessionId },
                     cancellationToken);
         }
         catch (Exception exception)

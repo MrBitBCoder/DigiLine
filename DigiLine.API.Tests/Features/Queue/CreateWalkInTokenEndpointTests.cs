@@ -423,7 +423,7 @@ public class CreateWalkInTokenEndpointTests
     }
 
     [Fact]
-    public async Task QueueHub_Negotiate_ReturnsConnectionAndTransports()
+    public async Task QueueHub_Negotiate_RequiresAuthentication()
     {
         var client = _factory.CreateClient();
 
@@ -431,18 +431,7 @@ public class CreateWalkInTokenEndpointTests
             "/hubs/queue/negotiate?negotiateVersion=1",
             new StringContent(string.Empty));
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var payload = JsonDocument.Parse(
-            await response.Content.ReadAsStringAsync());
-        var root = payload.RootElement;
-        Assert.False(string.IsNullOrWhiteSpace(
-            root.GetProperty("connectionId").GetString()));
-        Assert.False(string.IsNullOrWhiteSpace(
-            root.GetProperty("connectionToken").GetString()));
-        Assert.Contains(
-            root.GetProperty("availableTransports").EnumerateArray(),
-            transport => transport.GetProperty("transport").GetString()
-                == "WebSockets");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]

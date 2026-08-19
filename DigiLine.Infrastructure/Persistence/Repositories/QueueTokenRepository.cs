@@ -66,6 +66,19 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
                     cancellationToken);
         }
 
+        public Task<QueueToken?> GetActiveByPatientAsync(
+            Guid sessionId,
+            Guid patientProfileId,
+            CancellationToken cancellationToken = default) =>
+            _dbContext.QueueTokens.AsNoTracking()
+                .Where(token => token.SessionId == sessionId
+                    && token.PatientProfileId == patientProfileId
+                    && token.Status != QueueTokenStatus.Completed
+                    && token.Status != QueueTokenStatus.Cancelled
+                    && token.Status != QueueTokenStatus.NoShow)
+                .OrderByDescending(token => token.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
         public async Task<int?> GetMaximumTokenNumberAsync(
             Guid sessionId,
             CancellationToken cancellationToken = default)

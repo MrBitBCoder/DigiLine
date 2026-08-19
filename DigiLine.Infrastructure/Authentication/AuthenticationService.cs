@@ -55,9 +55,9 @@ namespace DigiLine.Infrastructure.Authentication
             var claims = new[]
             {
             new Claim(JwtRegisteredClaimNames.Sub, staff.Id.ToString()),
-            new Claim(ClaimTypes.Email, staff.Email),
-            new Claim(ClaimTypes.Name, staff.Name),
-            new Claim(ClaimTypes.Role, staff.Role.ToString()),
+            new Claim(JwtRegisteredClaimNames.Email, staff.Email),
+            new Claim(JwtRegisteredClaimNames.Name, staff.Name),
+            new Claim("role", staff.Role.ToString()),
             new Claim("clinic_id", staff.ClinicId.ToString())
         };
 

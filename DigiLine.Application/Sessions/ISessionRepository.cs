@@ -19,5 +19,31 @@ namespace DigiLine.Application.Sessions
         Task<Session?> GetByIdAsync(
             Guid sessionId,
             CancellationToken cancellationToken = default);
+
+        Task<IReadOnlyList<DoctorSessionRecord>> ListForDoctorAsync(
+            Guid clinicId,
+            Guid doctorId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        Task<DoctorSessionRecord?> GetForDoctorAsync(
+            Guid sessionId,
+            Guid clinicId,
+            Guid doctorId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        Task<IReadOnlyList<DoctorSessionRecord>> ListForClinicAsync(
+            Guid clinicId,
+            DateTime from,
+            DateTime to,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        Task<DoctorSessionRecord?> GetForClinicAsync(
+            Guid sessionId,
+            Guid clinicId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

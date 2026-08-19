@@ -89,7 +89,7 @@ namespace DigiLine.Application.Queue
             {
                 await _queueEventPublisher.PublishAsync(
                     new QueueChangedEvent(
-                        QueueEventType.TokenCreated,
+                        QueueEventType.WalkInCreated,
                         sessionId,
                         queueToken.Id,
                         queueToken.TokenNumber,

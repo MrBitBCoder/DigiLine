@@ -47,6 +47,42 @@ public class PauseSessionEndpointTests
         Assert.Equal(sessionId, resumeService.SessionId);
     }
 
+    [Fact]
+    public async Task Start_ReturnsRunningLifecycleResult()
+    {
+        var sessionId = Guid.NewGuid();
+        var service = new StubStartSessionService(
+            new SessionLifecycleResult(sessionId, SessionStatus.Running));
+        var controller = new SessionsController(
+            new StubCreateSessionService(), new StubPauseSessionService(null),
+            new StubResumeSessionService(null), startSessionService: service);
+
+        var action = await controller.Start(sessionId, CancellationToken.None);
+
+        var result = Assert.IsType<SessionLifecycleResult>(
+            Assert.IsType<OkObjectResult>(action).Value);
+        Assert.Equal(SessionStatus.Running, result.Status);
+        Assert.Equal(sessionId, service.SessionId);
+    }
+
+    [Fact]
+    public async Task Close_ReturnsClosedLifecycleResult()
+    {
+        var sessionId = Guid.NewGuid();
+        var service = new StubCloseSessionService(
+            new SessionLifecycleResult(sessionId, SessionStatus.Closed));
+        var controller = new SessionsController(
+            new StubCreateSessionService(), new StubPauseSessionService(null),
+            new StubResumeSessionService(null), closeSessionService: service);
+
+        var action = await controller.Close(sessionId, CancellationToken.None);
+
+        var result = Assert.IsType<SessionLifecycleResult>(
+            Assert.IsType<OkObjectResult>(action).Value);
+        Assert.Equal(SessionStatus.Closed, result.Status);
+        Assert.Equal(sessionId, service.SessionId);
+    }
+
     private sealed class StubPauseSessionService : IPauseSessionService
     {
         private readonly PauseSessionResult? _result;
@@ -83,5 +119,19 @@ public class PauseSessionEndpointTests
             CreateSessionRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class StubStartSessionService(SessionLifecycleResult result)
+        : IStartSessionService
+    {
+        public Guid SessionId { get; private set; }
+        public Task<SessionLifecycleResult> StartAsync(Guid sessionId, CancellationToken cancellationToken = default) { SessionId = sessionId; return Task.FromResult(result); }
+    }
+
+    private sealed class StubCloseSessionService(SessionLifecycleResult result)
+        : ICloseSessionService
+    {
+        public Guid SessionId { get; private set; }
+        public Task<SessionLifecycleResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) { SessionId = sessionId; return Task.FromResult(result); }
     }
 }

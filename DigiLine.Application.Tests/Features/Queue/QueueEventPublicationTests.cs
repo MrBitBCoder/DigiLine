@@ -1,4 +1,5 @@
 using DigiLine.Application.Queue;
+using DigiLine.Application.Patients;
 using DigiLine.Application.Sessions;
 using DigiLine.Application.Transactions;
 using DigiLine.Domain.Common;
@@ -27,10 +28,74 @@ public class QueueEventPublicationTests
         await service.CreateAsync(session.Id, "Jane Doe", null);
 
         var queueEvent = Assert.Single(publisher.Events);
-        Assert.Equal(QueueEventType.TokenCreated, queueEvent.Type);
+        Assert.Equal(QueueEventType.WalkInCreated, queueEvent.Type);
         Assert.Equal(session.Id, queueEvent.SessionId);
         Assert.Equal(7, queueEvent.TokenNumber);
         Assert.Equal(QueueTokenStatus.Waiting, queueEvent.TokenStatus);
+    }
+
+    [Fact]
+    public async Task BookToken_PublishesBookedEventAfterCommit()
+    {
+        var session = CreateScheduledSession();
+        var patient = new PatientProfile(Guid.NewGuid(), "Booked Patient", 30);
+        var queueRepository = new StubQueueTokenRepository();
+        var transactions = new StubTransactionManager();
+        var publisher = new RecordingPublisher(() =>
+            queueRepository.WasSaved && transactions.Transaction.Committed);
+        var service = new BookTokenService(
+            new StubTokenNumberService(12), queueRepository,
+            new StubSessionRepository(session),
+            new StubPatientProfileRepository(patient),
+            transactions, publisher);
+
+        await service.BookAsync(session.Id, patient.Id);
+
+        var queueEvent = Assert.Single(publisher.Events);
+        Assert.Equal(QueueEventType.TokenBooked, queueEvent.Type);
+        Assert.Equal(session.Id, queueEvent.SessionId);
+        Assert.Equal(12, queueEvent.TokenNumber);
+    }
+
+    [Fact]
+    public async Task QueueTransitions_PublishEveryRequiredEventAfterSave()
+    {
+        var session = CreateRunningSession();
+        var publisher = new RecordingPublisher();
+
+        var next = new QueueToken(session.Id, 1, "Next", null);
+        await new CallNextTokenService(
+            new StubSessionRepository(session),
+            new StubQueueTokenRepository(next),
+            new StubTransactionManager(), publisher).CallAsync(session.Id);
+
+        var recalled = new QueueToken(session.Id, 2, "Recall", null);
+        recalled.Call(DateTime.UtcNow);
+        await new RecallTokenService(new StubSessionRepository(session), new StubQueueTokenRepository(recalled), publisher).RecallAsync(session.Id, recalled.Id);
+
+        var skipped = new QueueToken(session.Id, 3, "Skip", null);
+        skipped.Call(DateTime.UtcNow);
+        await new SkipTokenService(new StubSessionRepository(session), new StubQueueTokenRepository(skipped), publisher).SkipAsync(session.Id, skipped.Id);
+
+        var completed = new QueueToken(session.Id, 4, "Complete", null);
+        completed.Call(DateTime.UtcNow);
+        await new CompleteTokenService(new StubSessionRepository(session), new StubQueueTokenRepository(completed), publisher).CompleteAsync(session.Id, completed.Id);
+
+        var cancelled = new QueueToken(session.Id, 5, "Cancel", null);
+        await new CancelTokenService(new StubSessionRepository(session), new StubQueueTokenRepository(cancelled), publisher).CancelAsync(session.Id, cancelled.Id);
+
+        var late = new QueueToken(session.Id, 6, "Late", null);
+        late.Call(DateTime.UtcNow); late.Skip();
+        await new MarkTokenLateService(new StubSessionRepository(session), new StubQueueTokenRepository(late), publisher).MarkLateAsync(session.Id, late.Id);
+
+        Assert.Equal(
+            new[] {
+                QueueEventType.TokenCalled, QueueEventType.TokenRecalled,
+                QueueEventType.TokenSkipped, QueueEventType.TokenCompleted,
+                QueueEventType.TokenCancelled, QueueEventType.TokenMarkedLate
+            },
+            publisher.Events.Select(queueEvent => queueEvent.Type));
+        Assert.All(publisher.Events, queueEvent => Assert.Equal(session.Id, queueEvent.SessionId));
     }
 
     [Fact]
@@ -78,6 +143,14 @@ public class QueueEventPublicationTests
             Guid.NewGuid(), Guid.NewGuid(), "Event test",
             now.AddMinutes(-30), now.AddMinutes(30),
             now.AddHours(2), now.AddHours(1), 10);
+    }
+
+    private static Session CreateRunningSession()
+    {
+        var session = CreateScheduledSession();
+        session.OpenBooking();
+        session.Start();
+        return session;
     }
 
     private sealed class RecordingPublisher : IQueueEventPublisher
@@ -132,7 +205,7 @@ public class QueueEventPublicationTests
             return Task.CompletedTask;
         }
         public Task<IReadOnlyList<QueueToken>> GetBySessionOrderedAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<QueueToken?> GetNextWaitingForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<QueueToken?> GetNextWaitingForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default) => Task.FromResult(_token?.SessionId == sessionId ? _token : null);
         public Task<int?> GetMaximumTokenNumberAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int?> AllocateNextTokenNumberAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
@@ -142,6 +215,16 @@ public class QueueEventPublicationTests
         private readonly int _tokenNumber;
         public StubTokenNumberService(int tokenNumber) => _tokenNumber = tokenNumber;
         public Task<int> GetNextTokenNumberAsync(Guid sessionId, CancellationToken cancellationToken = default) => Task.FromResult(_tokenNumber);
+    }
+
+    private sealed class StubPatientProfileRepository(PatientProfile patient)
+        : IPatientProfileRepository
+    {
+        public Task<PatientProfile?> GetByIdAsync(
+            Guid patientProfileId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<PatientProfile?>(
+                patient.Id == patientProfileId ? patient : null);
     }
 
     private sealed class StubTransactionManager : ITransactionManager

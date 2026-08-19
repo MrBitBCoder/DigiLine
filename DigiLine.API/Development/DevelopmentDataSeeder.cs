@@ -22,6 +22,7 @@ namespace DigiLine.API.Development
 
             const string clinicSlug = "dev-clinic";
             const string email = "doctor@dev.local";
+            const string receptionEmail = "reception@dev.local";
             const string password = "DevPassword123!";
 
             const string phoneNumber = "9876543210";
@@ -60,6 +61,15 @@ namespace DigiLine.API.Development
 
                 dbContext.Staff.Add(staff);
 
+                await dbContext.SaveChangesAsync();
+            }
+
+            var receptionExists = await dbContext.Staff.AnyAsync(x =>
+                x.ClinicId == clinic.Id && x.Email == receptionEmail);
+            if (!receptionExists)
+            {
+                dbContext.Staff.Add(new Staff(clinic.Id, "Development Reception",
+                    receptionEmail, passwordHasher.Hash(password), StaffRole.Receptionist));
                 await dbContext.SaveChangesAsync();
             }
 

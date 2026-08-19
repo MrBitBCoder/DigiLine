@@ -1,5 +1,6 @@
 ﻿using DigiLine.Application.Common.Authentication;
 using DigiLine.Application.Common.Interfaces;
+using DigiLine.Application.Clinics;
 using DigiLine.Application.Patients;
 using DigiLine.Application.Queue;
 using DigiLine.Application.Sessions;
@@ -9,6 +10,7 @@ using DigiLine.Infrastructure.Persistence;
 using DigiLine.Infrastructure.Persistence.Repositories;
 using DigiLine.Infrastructure.Persistence.Transactions;
 using DigiLine.Infrastructure.Tenancy;
+using DigiLine.Infrastructure.Patients;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,8 +39,11 @@ namespace DigiLine.Infrastructure
             services.AddScoped<IAuthenticationService, AuthenticationService>();
 
             services.AddScoped<ISessionRepository, SessionRepository>();
+            services.AddScoped<IPublicClinicRepository, PublicClinicRepository>();
 
             services.AddScoped<IPatientProfileRepository, PatientProfileRepository>();
+            services.AddScoped<IPublicPatientRepository, PublicPatientRepository>();
+            services.AddSingleton<IPatientAccessService, InMemoryPatientAccessService>();
 
             services.AddScoped<IQueueTokenRepository, QueueTokenRepository>();
 

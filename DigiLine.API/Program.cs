@@ -3,6 +3,8 @@ using DigiLine.API.Middleware;
 using DigiLine.API.Realtime;
 using DigiLine.Application.Queue;
 using DigiLine.Application.Sessions;
+using DigiLine.Application.Clinics;
+using DigiLine.Application.Patients;
 using DigiLine.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -33,9 +35,31 @@ builder.Services
                 Encoding.UTF8.GetBytes(
                     jwtSettings["SecretKey"]!))
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken)
+                    && context.HttpContext.Request.Path.StartsWithSegments("/hubs/queue"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddInfrastructure(builder.Configuration);
+
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
+    policy.WithOrigins(allowedOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials()));
 
 
 builder.Services.AddControllers();
@@ -76,6 +100,13 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddScoped<ICreateSessionService, CreateSessionService>();
 builder.Services.AddScoped<IPauseSessionService, PauseSessionService>();
 builder.Services.AddScoped<IResumeSessionService, ResumeSessionService>();
+builder.Services.AddScoped<IGetDoctorSessionsService, GetDoctorSessionsService>();
+builder.Services.AddScoped<IGetReceptionDashboardService, GetReceptionDashboardService>();
+builder.Services.AddScoped<IStartSessionService, StartSessionService>();
+builder.Services.AddScoped<ICloseSessionService, CloseSessionService>();
+builder.Services.AddScoped<IGetPublicClinicService, GetPublicClinicService>();
+builder.Services.AddScoped<IPublicPatientService, PublicPatientService>();
+builder.Services.AddScoped<IPublicQueueService, PublicQueueService>();
 builder.Services.AddScoped<IBookTokenService, BookTokenService>();
 builder.Services.AddScoped<ICreateWalkInTokenService, CreateWalkInTokenService>();
 builder.Services.AddScoped<IGetOrderedQueueService, GetOrderedQueueService>();
@@ -110,12 +141,15 @@ app.UseExceptionHandler();
 
 app.UseHttpsRedirection();
 
+app.UseCors("Frontend");
+
 app.UseAuthentication();
 
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<QueueHub>("/hubs/queue");
+app.MapHub<PublicQueueHub>("/hubs/public-queue");
 
 app.Run();
 
