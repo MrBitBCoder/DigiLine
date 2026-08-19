@@ -1,4 +1,6 @@
 using DigiLine.API.Development;
+using DigiLine.API.Middleware;
+using DigiLine.API.Realtime;
 using DigiLine.Application.Queue;
 using DigiLine.Application.Sessions;
 using DigiLine.Infrastructure;
@@ -37,6 +39,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IQueueEventPublisher, SignalRQueueEventPublisher>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
@@ -70,7 +74,24 @@ builder.Services.AddSwaggerGen(options =>
 
 
 builder.Services.AddScoped<ICreateSessionService, CreateSessionService>();
+builder.Services.AddScoped<IPauseSessionService, PauseSessionService>();
+builder.Services.AddScoped<IResumeSessionService, ResumeSessionService>();
 builder.Services.AddScoped<IBookTokenService, BookTokenService>();
+builder.Services.AddScoped<ICreateWalkInTokenService, CreateWalkInTokenService>();
+builder.Services.AddScoped<IGetOrderedQueueService, GetOrderedQueueService>();
+builder.Services.AddScoped<ICallNextTokenService, CallNextTokenService>();
+builder.Services.AddScoped<IRecallTokenService, RecallTokenService>();
+builder.Services.AddScoped<ISkipTokenService, SkipTokenService>();
+builder.Services.AddScoped<ICompleteTokenService, CompleteTokenService>();
+builder.Services.AddScoped<ICancelTokenService, CancelTokenService>();
+builder.Services.AddScoped<IMarkTokenLateService, MarkTokenLateService>();
+builder.Services.AddScoped<IGetQueuePositionService, GetQueuePositionService>();
+builder.Services.AddScoped<IGetEstimatedWaitService, GetEstimatedWaitService>();
+
+
+builder.Services.AddExceptionHandler<BookingExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 
 var app = builder.Build();
 
@@ -84,11 +105,18 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseExceptionHandler();
+
+
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<QueueHub>("/hubs/queue");
 
 app.Run();
+
+public partial class Program;

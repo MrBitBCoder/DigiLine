@@ -18,6 +18,7 @@ namespace DigiLine.Application.Queue
         private readonly ISessionRepository _sessionRepository;
         private readonly IPatientProfileRepository _patientProfileRepository;
         private readonly ITransactionManager _transactionManager;
+        private readonly IQueueEventPublisher? _queueEventPublisher;
 
 
         public BookTokenService(
@@ -25,13 +26,15 @@ namespace DigiLine.Application.Queue
             IQueueTokenRepository queueTokenRepository,
             ISessionRepository sessionRepository,
             IPatientProfileRepository patientProfileRepository,
-             ITransactionManager transactionManager)
+            ITransactionManager transactionManager,
+            IQueueEventPublisher? queueEventPublisher = null)
         {
             _tokenNumberService = tokenNumberService;
             _queueTokenRepository = queueTokenRepository;
             _sessionRepository = sessionRepository;
             _patientProfileRepository = patientProfileRepository;
             _transactionManager = transactionManager;
+            _queueEventPublisher = queueEventPublisher;
         }
 
         public async Task<int> BookAsync(
@@ -97,6 +100,20 @@ namespace DigiLine.Application.Queue
 
             await transaction.CommitAsync(
                 cancellationToken);
+
+            if (_queueEventPublisher is not null)
+            {
+                await _queueEventPublisher.PublishAsync(
+                    new QueueChangedEvent(
+                        QueueEventType.TokenCreated,
+                        sessionId,
+                        queueToken.Id,
+                        queueToken.TokenNumber,
+                        queueToken.Status,
+                        session.Status,
+                        DateTime.UtcNow),
+                    cancellationToken);
+            }
 
             return tokenNumber;
         }

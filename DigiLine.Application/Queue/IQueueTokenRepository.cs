@@ -9,6 +9,19 @@ namespace DigiLine.Application.Queue
 {
     public interface IQueueTokenRepository
     {
+        Task<IReadOnlyList<QueueToken>> GetBySessionOrderedAsync(
+            Guid sessionId,
+            CancellationToken cancellationToken = default);
+
+        Task<QueueToken?> GetNextWaitingForUpdateAsync(
+            Guid sessionId,
+            CancellationToken cancellationToken = default);
+
+        Task<QueueToken?> GetByIdAsync(
+            Guid sessionId,
+            Guid tokenId,
+            CancellationToken cancellationToken = default);
+
         Task<int?> GetMaximumTokenNumberAsync(
             Guid sessionId,
             CancellationToken cancellationToken = default);
