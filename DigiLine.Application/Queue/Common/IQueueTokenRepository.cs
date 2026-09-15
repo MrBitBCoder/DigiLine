@@ -34,6 +34,12 @@ namespace DigiLine.Application.Queue
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        Task<IReadOnlyList<QueueToken>> GetRecoverableByPatientAsync(
+            Guid sessionId,
+            Guid patientProfileId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         Task<int?> GetMaximumTokenNumberAsync(
             Guid sessionId,
             CancellationToken cancellationToken = default);

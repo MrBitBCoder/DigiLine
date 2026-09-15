@@ -57,6 +57,70 @@ public class PublicQueueServiceTests
         Assert.False(session.IsBookingOpen(now));
     }
 
+    [Fact]
+    public async Task GetTokenAsync_WhenTokenBelongsToAnotherPatient_DoesNotExposeIt()
+    {
+        var now = DateTime.UtcNow;
+        var session = new Session(Guid.NewGuid(), Guid.NewGuid(), "Live", now.AddHours(-2), now.AddHours(-1), now.AddHours(1), now.AddHours(1), 10);
+        session.OpenBooking();
+        session.Start();
+        session.StopBooking(now);
+        var token = new QueueToken(session.Id, 7, Guid.NewGuid());
+        var service = new PublicQueueService(new StubAccessService(), new StubPatientRepository(false), new StubBookingService(),
+            new StubTokenRepository(token), new StubSessionRepository(session), new StubPositionService(), new StubWaitService());
+
+        var result = await service.GetTokenAsync("access", session.Id, token.Id);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task RecoverAsync_ReturnsTheOnlyOwnedRecoverableTokenWithoutMutationOrBooking()
+    {
+        var session = LiveSession(); var sessionId = session.Id; var profileId = Guid.NewGuid();
+        var token = new QueueToken(sessionId, 15, profileId);
+        token.Call(DateTime.UtcNow); token.Skip(); token.MarkLate();
+        var originalStatus = token.Status; var originalOrder = token.QueueOrder;
+        var booking = new StubBookingService();
+        var service = new PublicQueueService(new StubAccessService(), new StubPatientRepository(true), booking,
+            new StubTokenRepository(token, [token]), new StubSessionRepository(session), new StubPositionService(), new StubWaitService());
+
+        var result = await service.RecoverAsync("access", sessionId, profileId);
+
+        Assert.NotNull(result); Assert.Equal(token.Id, result.TokenId); Assert.Equal(15, result.TokenNumber);
+        Assert.Equal(originalStatus, token.Status); Assert.Equal(originalOrder, token.QueueOrder); Assert.False(booking.WasCalled);
+    }
+
+    [Fact]
+    public async Task RecoverAsync_WhenOwnershipFailsOrMatchesAreAmbiguous_ReturnsNothing()
+    {
+        var session = LiveSession(); var sessionId = session.Id; var profileId = Guid.NewGuid();
+        var first = new QueueToken(sessionId, 1, profileId); var second = new QueueToken(sessionId, 2, profileId);
+        var notOwned = new PublicQueueService(new StubAccessService(), new StubPatientRepository(false), new StubBookingService(),
+            new StubTokenRepository(first, [first]), new StubSessionRepository(session), new StubPositionService(), new StubWaitService());
+        var ambiguous = new PublicQueueService(new StubAccessService(), new StubPatientRepository(true), new StubBookingService(),
+            new StubTokenRepository(first, [first, second]), new StubSessionRepository(session), new StubPositionService(), new StubWaitService());
+
+        Assert.Null(await notOwned.RecoverAsync("access", sessionId, profileId));
+        Assert.Null(await ambiguous.RecoverAsync("access", sessionId, profileId));
+    }
+
+    [Fact]
+    public async Task RecoverAsync_WithExpiredAccess_IsRejectedBeforeLookup()
+    {
+        var service = new PublicQueueService(new StubAccessService(), new StubPatientRepository(true), new StubBookingService(),
+            new StubTokenRepository(null), new StubSessionRepository(), new StubPositionService(), new StubWaitService());
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.RecoverAsync("expired", Guid.NewGuid(), Guid.NewGuid()));
+    }
+
+    private static Session LiveSession()
+    {
+        var now = DateTime.UtcNow;
+        var session = new Session(Guid.NewGuid(), Guid.NewGuid(), "Live", now.AddHours(-2), now.AddHours(-1), now.AddHours(1), now.AddHours(1), 10);
+        session.OpenBooking(); session.Start(); session.StopBooking(now);
+        return session;
+    }
+
     private static PublicQueueService CreateService(QueueToken? token, StubBookingService booking, bool ownsProfile) =>
         new(new StubAccessService(), new StubPatientRepository(ownsProfile), booking,
             new StubTokenRepository(token), new StubSessionRepository(),
@@ -80,9 +144,10 @@ public class PublicQueueServiceTests
         public bool WasCalled { get; private set; }
         public Task<int> BookAsync(Guid sessionId, Guid patientProfileId, CancellationToken cancellationToken = default) { WasCalled = true; return Task.FromResult(10); }
     }
-    private sealed class StubTokenRepository(QueueToken? token) : IQueueTokenRepository
+    private sealed class StubTokenRepository(QueueToken? token, IReadOnlyList<QueueToken>? recoverable = null) : IQueueTokenRepository
     {
         public Task<QueueToken?> GetActiveByPatientAsync(Guid sessionId, Guid patientProfileId, CancellationToken cancellationToken = default) => Task.FromResult(token);
+        public Task<IReadOnlyList<QueueToken>> GetRecoverableByPatientAsync(Guid sessionId, Guid patientProfileId, CancellationToken cancellationToken = default) => Task.FromResult(recoverable ?? []);
         public Task<QueueToken?> GetByIdAsync(Guid sessionId, Guid tokenId, CancellationToken cancellationToken = default) => Task.FromResult(token?.SessionId == sessionId && token.Id == tokenId ? token : null);
         public Task<IReadOnlyList<QueueToken>> GetBySessionOrderedAsync(Guid sessionId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<QueueToken>>(token is null ? [] : [token]);
         public Task<QueueToken?> GetNextWaitingForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();

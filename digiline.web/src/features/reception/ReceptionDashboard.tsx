@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { ApiError } from "../../api/httpClient";
+import { ApiError, getApiErrorMessage } from "../../api/httpClient";
 import { useQueueRealtime } from "../../realtime";
 import {
   Button,
@@ -18,6 +18,7 @@ import {
   SelectField,
   StatusBadge,
   TextField,
+  useToast,
   type TableColumn,
 } from "../../shared/ui";
 import type {
@@ -33,25 +34,6 @@ import { type QueueFilter } from "../../shared/queueView";
 import "../doctor/doctor-dashboard.css";
 import "./reception-dashboard.css";
 
-function message(error: unknown) {
-  if (error instanceof ApiError && typeof error.details === "object" && error.details && "errors" in error.details) {
-    const validation = error.details.errors;
-    if (typeof validation === "object" && validation) {
-      const messages = Object.values(validation).flatMap(value => Array.isArray(value) ? value : []);
-      if (messages.length) return messages.map(String).join(" ");
-    }
-  }
-  if (
-    error instanceof ApiError &&
-    typeof error.details === "object" &&
-    error.details &&
-    "detail" in error.details
-  )
-    return String(error.details.detail);
-  return error instanceof Error
-    ? error.message
-    : "The action could not be completed.";
-}
 interface Confirmation {
   title: string;
   message: string;
@@ -61,6 +43,7 @@ interface Confirmation {
 }
 
 export function ReceptionDashboard() {
+  const toast = useToast();
   const [data, setData] = useState<ReceptionData | null>(null);
   const [selectedDetails, setSelectedDetails] = useState<DoctorSessionDetails | null>(null);
   const [sessionPage, setSessionPage] = useState(1);
@@ -90,7 +73,7 @@ export function ReceptionDashboard() {
   }, [selectedId, sessionPage, page, queueFilter]);
   useEffect(() => {
     const controller = new AbortController();
-    void load(controller.signal).catch(caught => { if (!controller.signal.aborted) setError(message(caught)); })
+    void load(controller.signal).catch(caught => { if (!controller.signal.aborted) setError(getApiErrorMessage(caught)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [attempt, load]);
@@ -99,7 +82,7 @@ export function ReceptionDashboard() {
       try {
         await load();
       } catch (caught) {
-        setActionError(message(caught));
+        setActionError(getApiErrorMessage(caught));
       }
     }
   }, [load]);
@@ -113,9 +96,16 @@ export function ReceptionDashboard() {
     try {
       await action();
       await load();
+      if (key === "walk-in") toast.success("Walk-in patient added successfully.");
+      else if (key.startsWith("recall-")) toast.success("Patient called again.");
+      else if (key.startsWith("late-")) toast.success("Patient marked as arrived.");
+      else if (key.startsWith("cancel-")) toast.success("Token cancelled.");
+      else toast.success("Queue updated.");
       return true;
     } catch (caught) {
-      setActionError(message(caught));
+      const message = getApiErrorMessage(caught);
+      if (caught instanceof ApiError && caught.status === 409 && /already/i.test(message)) toast.warning(message);
+      else toast.error(message);
       return false;
     } finally {
       busyRef.current = null;

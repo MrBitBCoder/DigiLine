@@ -29,8 +29,9 @@ public sealed class GetPublicClinicService : IGetPublicClinicService
 
         var sessions = clinic.Sessions
             .Where(session => session.Status is SessionStatus.Running or SessionStatus.Paused
-                || (session.BookingStoppedAt == null && SessionBookingAvailability.IsOpen(session.Status, session.BookingOpenTime,
-                    session.LastBookingTime, session.EndTime, now)))
+                || (session.Status == SessionStatus.BookingOpen
+                    && session.BookingStoppedAt == null
+                    && now < session.EndTime))
             .OrderBy(session => session.StartTime)
             .Select(session => new PublicSessionSummary(
                 session.Id,

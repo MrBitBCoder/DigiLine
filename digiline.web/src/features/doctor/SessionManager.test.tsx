@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { DoctorSessionSummary } from "../../shared/types/domain";
 import { SessionManager } from "./SessionManager";
+import { ToastProvider } from "../../shared/ui";
 
 const api = vi.hoisted(() => ({ listSessions: vi.fn(), clinicTimeZone: vi.fn(), updateSession: vi.fn(), deleteSession: vi.fn(), createSession: vi.fn() }));
 vi.mock("./doctorApi", () => ({ doctorApi: api }));
@@ -138,7 +139,7 @@ it("lists, edits, and deletes an unbooked future session", async () => {
   api.deleteSession.mockResolvedValue(undefined);
   const onSelect = vi.fn().mockResolvedValue(undefined);
   const onDeleted = vi.fn().mockResolvedValue(undefined);
-  render(<SessionManager onSelect={onSelect} onDeleted={onDeleted} />);
+  render(<ToastProvider><SessionManager onSelect={onSelect} onDeleted={onDeleted} /></ToastProvider>);
 
   expect(await screen.findByText("Morning session")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Edit" }));
@@ -152,6 +153,8 @@ it("lists, edits, and deletes an unbooked future session", async () => {
   await user.click(screen.getByRole("button", { name: "Delete session" }));
   await waitFor(() => expect(api.deleteSession).toHaveBeenCalledWith("session-1"));
   await waitFor(() => expect(onDeleted).toHaveBeenCalled());
+  expect(screen.getByText("Session updated.")).toBeInTheDocument();
+  expect(screen.getByText("Session deleted.")).toBeInTheDocument();
 });
 
 

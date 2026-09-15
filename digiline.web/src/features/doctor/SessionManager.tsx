@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError } from "../../api/httpClient";
-import { Button, ConfirmationDialog, DataTable, StatusBadge, type TableColumn } from "../../shared/ui";
+import { getApiErrorMessage } from "../../api/httpClient";
+import { Button, ConfirmationDialog, DataTable, StatusBadge, useToast, type TableColumn } from "../../shared/ui";
 import type { DoctorSessionSummary, SessionStatus } from "../../shared/types/domain";
 import { CreateSessionForm } from "./CreateSessionForm";
 import { doctorApi } from "./doctorApi";
@@ -10,13 +10,8 @@ const sessionStatusValues: Record<SessionStatus, number> = { Scheduled: 1, Booki
 
 type DateFilter = "all" | "day" | "range";
 
-function errorMessage(error: unknown) {
-  if (error instanceof ApiError && typeof error.details === "object" && error.details && "detail" in error.details)
-    return String(error.details.detail);
-  return error instanceof Error ? error.message : "Session action failed.";
-}
-
 export function SessionManager({ onSelect, onDeleted }: { onSelect: (id: string) => Promise<void>; onDeleted: () => Promise<void> }) {
+  const toast = useToast();
   const [sessions, setSessions] = useState<DoctorSessionSummary[]>([]);
   const [editing, setEditing] = useState<DoctorSessionSummary | null>(null);
   const [creating, setCreating] = useState(false);
@@ -44,7 +39,7 @@ export function SessionManager({ onSelect, onDeleted }: { onSelect: (id: string)
   }, [query]);
   useEffect(() => {
     const controller = new AbortController();
-    const refresh = () => { void load(controller.signal).catch(e => { if (!controller.signal.aborted) setError(errorMessage(e)); }); };
+    const refresh = () => { void load(controller.signal).catch(e => { if (!controller.signal.aborted) setError(getApiErrorMessage(e, "Session action failed.")); }); };
     const visible = () => { if (document.visibilityState === "visible") refresh(); };
     const timer = setTimeout(refresh, 200);
     const poll = setInterval(visible, 15_000);
@@ -76,7 +71,8 @@ export function SessionManager({ onSelect, onDeleted }: { onSelect: (id: string)
       setDeleting(null);
       await load();
       await onDeleted();
-    } catch (caught) { setError(errorMessage(caught)); }
+      toast.success("Session deleted.");
+    } catch (caught) { toast.error(getApiErrorMessage(caught, "Session action failed.")); }
     finally { setBusy(false); }
   }
 

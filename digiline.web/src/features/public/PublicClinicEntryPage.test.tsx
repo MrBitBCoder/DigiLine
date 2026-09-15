@@ -8,6 +8,7 @@ import type {
   PublicTokenState,
 } from "../../shared/types/domain";
 import { PublicClinicEntryPage } from "./PublicClinicEntryPage";
+import { ToastProvider } from "../../shared/ui";
 
 const api = vi.hoisted(() => ({
   getBySlug: vi.fn(),
@@ -15,6 +16,7 @@ const api = vi.hoisted(() => ({
   confirmVerification: vi.fn(),
   createProfile: vi.fn(),
   book: vi.fn(),
+  recover: vi.fn(),
   getToken: vi.fn(),
 }));
 const realtime = vi.hoisted(() => ({
@@ -64,11 +66,13 @@ const tokenState: PublicTokenState = {
 };
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={["/c/hope"]}>
-      <Routes>
-        <Route path="/c/:clinicSlug" element={<PublicClinicEntryPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={["/c/hope"]}>
+        <Routes>
+          <Route path="/c/:clinicSlug" element={<PublicClinicEntryPage />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   );
 }
 function storeToken() {
@@ -123,6 +127,9 @@ describe("PublicClinicEntryPage", () => {
     api.getToken.mockResolvedValue(tokenState);
     const user = userEvent.setup();
     renderPage();
+    expect(await screen.findByText("Clinic time:")).toBeInTheDocument();
+    expect(screen.getByText("Booking starts:")).toBeInTheDocument();
+    expect(screen.getByText("Booking is currently open")).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Join queue" }));
     await user.type(screen.getByLabelText(/Phone number/), "9876543210");
     await user.click(
@@ -202,8 +209,49 @@ describe("PublicClinicEntryPage", () => {
     renderPage();
     expect(await screen.findByText("Morning session")).toBeInTheDocument();
     expect(screen.getByText("#4")).toBeInTheDocument();
-    expect(screen.getByText(/Booking closed/)).toBeInTheDocument();
+    expect(screen.getByText(/Booking has closed for this session/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Join queue" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Find my token" })).toBeEnabled();
+  });
+
+  it("recovers an issued token after booking stops without creating anything", async () => {
+    api.getBySlug.mockResolvedValue({ ...clinic, sessions: [{ ...clinic.sessions[0], isBookingOpen: false }] });
+    api.requestVerification.mockResolvedValue({ challengeId: "challenge-1", developmentCode: "123456" });
+    api.confirmVerification.mockResolvedValue({ accessToken: "recovered-access", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      profiles: [{ id: "profile-1", name: "Asha", age: 29 }] });
+    api.recover.mockResolvedValue({ sessionId: "session-1", tokenId: "token-1", tokenNumber: 8 });
+    api.getToken.mockResolvedValue(tokenState);
+    const user = userEvent.setup(); renderPage();
+    await user.click(await screen.findByRole("button", { name: "Find my token" }));
+    expect(screen.getByText(/will not create a new token/i)).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Phone number/), "9876543210");
+    await user.click(screen.getByRole("button", { name: "Send verification code" }));
+    await user.type(await screen.findByLabelText(/6-digit code/), "123456");
+    await user.click(screen.getByRole("button", { name: "Verify" }));
+    await user.click(await screen.findByRole("button", { name: /Asha/ }));
+    expect(await screen.findByText("#8")).toBeInTheDocument();
+    expect(screen.getByText("Now serving").nextElementSibling).toHaveTextContent("#4");
+    expect(api.recover).toHaveBeenCalledWith("recovered-access", "session-1", "profile-1");
+    expect(api.book).not.toHaveBeenCalled(); expect(api.createProfile).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem("digiline.active-token")).toContain("recovered-access");
+  });
+
+  it("does not disclose failed recovery details and remains retryable", async () => {
+    api.getBySlug.mockResolvedValue({ ...clinic, sessions: [{ ...clinic.sessions[0], isBookingOpen: false }] });
+    api.requestVerification.mockResolvedValue({ challengeId: "challenge-1" });
+    api.confirmVerification.mockResolvedValue({ accessToken: "access", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      profiles: [{ id: "profile-1", name: "Asha", age: 29 }] });
+    api.recover.mockRejectedValue(new ApiError("Not found", 404));
+    const user = userEvent.setup(); renderPage();
+    await user.click(await screen.findByRole("button", { name: "Find my token" }));
+    await user.type(screen.getByLabelText(/Phone number/), "9876543210");
+    await user.click(screen.getByRole("button", { name: "Send verification code" }));
+    await user.type(await screen.findByLabelText(/6-digit code/), "123456");
+    await user.click(screen.getByRole("button", { name: "Verify" }));
+    await user.click(await screen.findByRole("button", { name: /Asha/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't find an active token for this patient in this session.");
+    expect(screen.getByRole("button", { name: /Asha/ })).toBeEnabled();
+    expect(api.book).not.toHaveBeenCalled();
   });
 
   it("shows pre-start, running, and paused sessions with open booking", async () => {
@@ -220,9 +268,53 @@ describe("PublicClinicEntryPage", () => {
     expect(screen.getAllByRole("button", { name: "Join queue" })).toHaveLength(3);
     expect(screen.getByText("Pre-start session")).toBeInTheDocument();
     expect(screen.getByText("Paused session")).toBeInTheDocument();
-    expect(screen.getByText("Booking open · Doctor paused")).toBeInTheDocument();
+    expect(screen.getByText("Booking is currently open · Doctor paused")).toBeInTheDocument();
     expect(screen.queryByText("Scheduled")).not.toBeInTheDocument();
     expect(screen.queryByText("Closed")).not.toBeInTheDocument();
+  });
+
+  it("shows an upcoming booking time in the clinic timezone", async () => {
+    api.getBySlug.mockResolvedValue({
+      ...clinic,
+      timeZoneId: "Asia/Kolkata",
+      sessions: [{
+        ...clinic.sessions[0],
+        status: "BookingOpen",
+        isBookingOpen: false,
+        bookingOpenTime: "2099-08-19T03:30:00Z",
+        startTime: "2099-08-19T04:30:00Z",
+        endTime: "2099-08-19T07:30:00Z",
+      }],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/Booking opens at 9:00 (?:AM|a\.m\.)/i)).toBeInTheDocument();
+    expect(screen.getByText("Booking starts:").parentElement).toHaveTextContent(/9:00 (?:AM|a\.m\.)/i);
+    expect(screen.getByText("Clinic time:").parentElement).toHaveTextContent(/10:00 (?:AM|a\.m\.) – 1:00 (?:PM|p\.m\.)/i);
+    expect(screen.getByRole("button", { name: "Join queue" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Find my token" })).not.toBeInTheDocument();
+  });
+
+  it("refreshes patient timing after the doctor edits the session", async () => {
+    api.getBySlug.mockResolvedValue({ ...clinic, timeZoneId: "UTC" });
+    renderPage();
+    expect(await screen.findByText("Clinic time:")).toBeInTheDocument();
+
+    api.getBySlug.mockResolvedValue({
+      ...clinic,
+      timeZoneId: "UTC",
+      sessions: [{
+        ...clinic.sessions[0],
+        bookingOpenTime: "2026-08-19T05:30:00Z",
+        startTime: "2026-08-19T07:00:00Z",
+        endTime: "2026-08-19T11:00:00Z",
+      }],
+    });
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+
+    expect(screen.getByText("Booking starts:").parentElement).toHaveTextContent(/5:30 (?:AM|a\.m\.)/i);
+    expect(screen.getByText("Clinic time:").parentElement).toHaveTextContent(/7:00 (?:AM|a\.m\.) – 11:00 (?:AM|a\.m\.)/i);
   });
 
   it.each(["Running", "Paused"] as const)("restores and refreshes an existing token after booking stops in %s", async sessionStatus => {
@@ -245,7 +337,7 @@ describe("PublicClinicEntryPage", () => {
     expect(screen.getByLabelText(/Phone number/)).toBeInTheDocument();
     api.getBySlug.mockResolvedValue({ ...clinic, sessions: [{ ...clinic.sessions[0], isBookingOpen: false }] });
     await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
-    expect(await screen.findByText("Booking closed")).toBeInTheDocument();
+    expect(await screen.findByText("Booking has closed for this session")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Phone number/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Join queue" })).toBeDisabled();
     expect(api.book).not.toHaveBeenCalled();
@@ -264,11 +356,11 @@ describe("PublicClinicEntryPage", () => {
   });
   it("removes a completed session from the public listing after refresh", async () => {
     renderPage();
-    expect(await screen.findByText("Booking open")).toBeInTheDocument();
+    expect(await screen.findByText("Booking is currently open")).toBeInTheDocument();
     api.getBySlug.mockResolvedValue({ ...clinic, sessions: [] });
     await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
     expect(await screen.findByText("No live sessions or open bookings")).toBeInTheDocument();
-    expect(screen.queryByText("Booking open")).not.toBeInTheDocument();
+    expect(screen.queryByText("Booking is currently open")).not.toBeInTheDocument();
   });
 
 });

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using DigiLine.Application.Administration;
 using DigiLine.Application.Common.Interfaces;
+using DigiLine.Application.Common;
 using DigiLine.Domain.Common;
 using DigiLine.Domain.Entities;
 using DigiLine.Infrastructure.Persistence;
@@ -42,7 +43,7 @@ public sealed class AdministrationService(DigiLineDbContext db, IPasswordHasher 
         db.Clinics.Add(clinic); db.Staff.Add(owner); Audit(clinic.Id, owner.Id, owner.Id, "Clinic registered");
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException e) when (e.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 })
-        { throw new ArgumentException("That clinic address or staff email is already registered."); }
+        { throw new ApplicationConflictException("That clinic address or staff email is already registered."); }
     }
     public async Task<object> GetClinicAsync(Guid clinicId, CancellationToken ct) => await db.Clinics.AsNoTracking()
         .Where(x => x.Id == clinicId).Select(x => new { x.Id, x.Name, x.Slug, x.TimeZoneId }).SingleAsync(ct);
@@ -94,12 +95,12 @@ public sealed class AdministrationService(DigiLineDbContext db, IPasswordHasher 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await LockClinic(clinicId, ct);
         if (await db.Staff.AnyAsync(x => x.NormalizedEmail == staff.NormalizedEmail, ct))
-            throw new ArgumentException("That email is already registered.");
+            throw new ApplicationConflictException("That email is already registered.");
         db.Staff.Add(staff);
         Audit(clinicId, actorId, staff.Id, "Staff created");
         try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
         catch (DbUpdateException e) when (e.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 })
-        { throw new ArgumentException("That email is already registered."); }
+        { throw new ApplicationConflictException("That email is already registered."); }
         return new(staff.Id, staff.Name, staff.Email, staff.Roles.Select(x => x.Role).ToArray(), staff.IsActive, staff.InvitationPending, false);
     }
     public async Task<StaffView> InviteAsync(Guid clinicId, Guid actorId, InviteStaffRequest request, CancellationToken ct)
@@ -108,12 +109,12 @@ public sealed class AdministrationService(DigiLineDbContext db, IPasswordHasher 
         staff.UpdateAccess(staff.Name, Roles(request.Roles), false); staff.AwaitInvitation();
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await LockClinic(clinicId, ct);
-        if (await db.Staff.AnyAsync(x => x.NormalizedEmail == staff.NormalizedEmail, ct)) throw new ArgumentException("That email is already registered.");
+        if (await db.Staff.AnyAsync(x => x.NormalizedEmail == staff.NormalizedEmail, ct)) throw new ApplicationConflictException("That email is already registered.");
         db.Staff.Add(staff); var (invitation, raw) = await NewInvitation(staff.Id, ct);
         Audit(clinicId, actorId, staff.Id, "Staff invited");
         try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
         catch (DbUpdateException e) when (e.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 })
-        { throw new ArgumentException("That email is already registered."); }
+        { throw new ApplicationConflictException("That email is already registered."); }
         var delivered = await Deliver(staff, invitation, raw, ct);
         return new(staff.Id, staff.Name, staff.Email, staff.Roles.Select(x => x.Role).ToArray(), false, true, !delivered);
     }

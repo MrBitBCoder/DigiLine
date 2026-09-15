@@ -5,6 +5,7 @@ import type {
   PublicPatientProfile,
   PublicSessionSummary,
   PublicTokenState,
+  PublicTokenRecoveryResult,
   QueueTokenStatus,
   SessionStatus,
   VerifiedPatientAccess,
@@ -72,6 +73,12 @@ export const publicClinicApi = {
     }),
   book: (accessToken: string, sessionId: string, patientProfileId: string) =>
     request<PublicBookingResult>("/api/public/queue/book", {
+      method: "POST",
+      headers: patientHeaders(accessToken),
+      body: { sessionId, patientProfileId },
+    }),
+  recover: (accessToken: string, sessionId: string, patientProfileId: string) =>
+    request<PublicTokenRecoveryResult>("/api/public/queue/recover", {
       method: "POST",
       headers: patientHeaders(accessToken),
       body: { sessionId, patientProfileId },

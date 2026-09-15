@@ -1,15 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { request, ApiError } from "../../api/httpClient";
+import { request, getApiErrorMessage } from "../../api/httpClient";
 import { useAuth } from "../../auth/AuthContext";
-import { Button, Card, TextField } from "../../shared/ui";
-
-function errorText(error: unknown) {
-  if (error instanceof ApiError && typeof error.details === "string") return error.details;
-  return error instanceof Error ? error.message : "Please try again.";
-}
+import { Button, Card, TextField, useToast } from "../../shared/ui";
 
 export function ChangePasswordPage() {
+  const toast = useToast();
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [currentPassword, setCurrent] = useState("");
@@ -23,8 +19,9 @@ export function ChangePasswordPage() {
     setBusy(true); setError("");
     try {
       await request<void>("/api/auth/change-password", { method: "POST", body: { currentPassword, newPassword, confirmPassword } });
+      toast.success("Password changed successfully. Sign in with your new password.");
       logout(); navigate("/login", { replace: true });
-    } catch (caught) { setError(errorText(caught)); }
+    } catch (caught) { toast.error(getApiErrorMessage(caught)); }
     finally { setBusy(false); }
   }
   return <Card><h1>Change password</h1><p>Use at least 12 characters with uppercase, lowercase, a number, and a symbol.</p>
@@ -38,14 +35,15 @@ export function ChangePasswordPage() {
 }
 
 export function ForgotPasswordPage() {
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
-    try { await request("/api/auth/forgot-password", { method: "POST", body: { email } }); setSent(true); }
-    catch (caught) { setError(errorText(caught)); }
+    try { await request("/api/auth/forgot-password", { method: "POST", body: { email } }); setSent(true); toast.info("If that email is registered, a reset link has been sent."); }
+    catch (caught) { toast.error(getApiErrorMessage(caught)); }
     finally { setBusy(false); }
   }
   return <main className="login-page"><Card className="login-card"><h1>Forgot password</h1>
@@ -59,6 +57,7 @@ export function ForgotPasswordPage() {
 }
 
 export function ResetPasswordPage() {
+  const toast = useToast();
   const [token] = useState(() => {
     return new URLSearchParams(window.location.hash.slice(1)).get("token");
   });
@@ -72,8 +71,8 @@ export function ResetPasswordPage() {
     event.preventDefault();
     if (newPassword !== confirmPassword) { setError("Passwords do not match."); return; }
     setBusy(true); setError("");
-    try { await request<void>("/api/auth/reset-password", { method: "POST", body: { token, newPassword, confirmPassword } }); setDone(true); }
-    catch (caught) { setError(errorText(caught)); }
+    try { await request<void>("/api/auth/reset-password", { method: "POST", body: { token, newPassword, confirmPassword } }); setDone(true); toast.success("Password reset successfully."); }
+    catch (caught) { toast.error(getApiErrorMessage(caught)); }
     finally { setBusy(false); }
   }
   return <main className="login-page"><Card className="login-card"><h1>Reset password</h1>

@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { AdministrationPage } from "./AdministrationPages";
+import { ApiError } from "../../api/httpClient";
+import { ToastProvider } from "../../shared/ui";
 
 const api = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("../../api/httpClient", async importOriginal => ({ ...await importOriginal<typeof import("../../api/httpClient")>(), request: api.request }));
@@ -15,7 +17,7 @@ beforeEach(() => {
     return { items: [created], page: 1, pageSize: 10, totalCount: 1 };
   });
 });
-function show() { render(<MemoryRouter><AdministrationPage /></MemoryRouter>); }
+function show() { render(<ToastProvider><MemoryRouter><AdministrationPage /></MemoryRouter></ToastProvider>); }
 async function fill(confirm = "VerificationOnly123!") {
   const user = userEvent.setup();
   await user.type(await screen.findByLabelText(/Staff name/), "New staff");
@@ -46,6 +48,22 @@ it("shows authoritative password-policy errors", async () => {
   api.request.mockRejectedValueOnce(new Error("Use at least 12 characters with uppercase, lowercase, number, and symbol."));
   await user.click(screen.getByRole("button", { name: "Create staff" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("uppercase, lowercase, number, and symbol");
+});
+it("keeps entered staff values and suppresses success when the email already exists", async () => {
+  show(); const user = await fill();
+  api.request.mockRejectedValueOnce(new ApiError("Conflict", 409, {
+    title: "The request conflicts with the current state.",
+    detail: "That email is already registered.",
+  }));
+
+  await user.click(screen.getByRole("button", { name: "Create staff" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("That email is already registered.");
+  expect(screen.getByLabelText(/Staff name/)).toHaveValue("New staff");
+  expect(screen.getByLabelText(/Staff email/)).toHaveValue("staff@example.test");
+  expect(screen.getByLabelText(/^Password/)).toHaveValue("VerificationOnly123!");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Create staff" })).toBeEnabled();
 });
 it("retains resend and revoke only for legacy pending invitations", async () => {
   api.request.mockImplementation(async (url: string) => url === "/api/admin/clinic" ? { name: "Clinic", slug: "clinic", timeZoneId: "Asia/Kolkata" } : { items: [{ ...created, invitationPending: true, isActive: false }], page: 1, pageSize: 10, totalCount: 1 });

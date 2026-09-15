@@ -54,6 +54,15 @@
 .public-entry-home .public-session-card > button {
   grid-column: 1 / -1;
 }
+.token-recovery-action {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
 .public-entry-home > footer {
   padding: 0.75rem 0 0;
 }
@@ -123,6 +132,14 @@
 .public-session-card p {
   margin: 0;
   color: var(--color-muted);
+}
+.public-session-timing {
+  display: grid;
+  gap: 0.2rem;
+}
+.public-session-timing strong {
+  color: var(--color-ink);
+  font-weight: 650;
 }
 .public-session-card dl,
 .booking-confirm dl {

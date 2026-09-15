@@ -92,6 +92,23 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
                 .OrderByDescending(token => token.CreatedAt)
                 .FirstOrDefaultAsync(cancellationToken);
 
+        public async Task<IReadOnlyList<QueueToken>> GetRecoverableByPatientAsync(
+            Guid sessionId,
+            Guid patientProfileId,
+            CancellationToken cancellationToken = default) =>
+            await _dbContext.QueueTokens.AsNoTracking()
+                .Where(token => token.SessionId == sessionId
+                    && token.PatientProfileId == patientProfileId
+                    && (token.Status == QueueTokenStatus.Waiting
+                        || token.Status == QueueTokenStatus.Called
+                        || token.Status == QueueTokenStatus.InConsultation
+                        || token.Status == QueueTokenStatus.Skipped
+                        || token.Status == QueueTokenStatus.Late))
+                .OrderByDescending(token => token.CreatedAt)
+                .ThenByDescending(token => token.Id)
+                .Take(2)
+                .ToListAsync(cancellationToken);
+
         public async Task<int?> GetMaximumTokenNumberAsync(
             Guid sessionId,
             CancellationToken cancellationToken = default)

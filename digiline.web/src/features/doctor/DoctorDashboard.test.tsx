@@ -8,6 +8,7 @@ import type {
   SessionStatus,
 } from "../../shared/types/domain";
 import { DoctorDashboard } from "./DoctorDashboard";
+import { ToastProvider } from "../../shared/ui";
 
 const api = vi.hoisted(() => ({
   createSession: vi.fn(),
@@ -178,7 +179,7 @@ describe("DoctorDashboard", () => {
       }),
     );
     const user = userEvent.setup();
-    render(<DoctorDashboard />);
+    render(<ToastProvider><DoctorDashboard /></ToastProvider>);
     await user.click(await screen.findByRole("button", { name: "Call next" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Call Next is only available for a running session.",
@@ -303,6 +304,23 @@ describe("DoctorDashboard", () => {
     const button = screen.queryByRole("button", { name: "Stop booking" });
     if (available) expect(button).toBeEnabled();
     else expect(button).not.toBeInTheDocument();
+  });
+
+  it("shows action feedback after stopping booking without relying on realtime refresh", async () => {
+    const before = fixture("Running", []);
+    before.session.isBookingOpen = true;
+    before.session.bookingHasStopped = false;
+    const after = fixture("Running", []);
+    after.session.isBookingOpen = false;
+    after.session.bookingHasStopped = true;
+    api.getActiveOrUpcoming.mockResolvedValue(before);
+    api.stopBooking.mockResolvedValue(undefined);
+    api.getSession.mockResolvedValue(after);
+    const user = userEvent.setup();
+    render(<ToastProvider><DoctorDashboard /></ToastProvider>);
+    await user.click(await screen.findByRole("button", { name: "Stop booking" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Stop booking" }));
+    expect(await screen.findByText("Booking stopped. No new patients can join.")).toBeInTheDocument();
   });
 
 });

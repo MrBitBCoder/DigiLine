@@ -3,15 +3,15 @@ import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ApiError } from "../../api/httpClient";
 import { useAuth } from "../../auth/AuthContext";
-import { Button, Card, TextField } from "../../shared/ui";
+import { Button, Card, TextField, useToast } from "../../shared/ui";
 import "./login-page.css";
 export function LoginPage() {
   const { session, login } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   if (session)
     return (
@@ -22,7 +22,6 @@ export function LoginPage() {
     );
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setError("");
     setSubmitting(true);
     try {
       const next = await login(email.trim(), password);
@@ -32,7 +31,7 @@ export function LoginPage() {
         { replace: true },
       );
     } catch (caught) {
-      setError(
+      toast.error(
         caught instanceof ApiError && caught.status === 401
           ? "The email or password is incorrect."
           : caught instanceof Error
@@ -80,11 +79,6 @@ export function LoginPage() {
             onChange={(event) => setPassword(event.target.value)}
             required
           />
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
           <Button className="login-button" busy={submitting} type="submit">
             {submitting ? "Signing in…" : "Sign in"}
           </Button>

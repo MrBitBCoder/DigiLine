@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using DigiLine.Application.Common;
 
 namespace DigiLine.API.Middleware
 {
@@ -19,12 +20,18 @@ namespace DigiLine.API.Middleware
             Exception exception,
             CancellationToken cancellationToken)
         {
+            var path = httpContext.Request.Path;
             if (exception is DigiLine.Application.Sessions.SessionCompletionException completion)
             {
                 httpContext.Response.StatusCode = 409;
                 var problem = new ProblemDetails { Status = 409, Title = "Session is not ready to complete", Detail = completion.Message };
                 problem.Extensions["counts"] = completion.Counts;
                 await httpContext.Response.WriteAsJsonAsync(problem, cancellationToken); return true;
+            }
+            if (exception is ApplicationConflictException conflict)
+            {
+                await WriteProblem(httpContext, StatusCodes.Status409Conflict, "The request conflicts with the current state.", conflict.Message, cancellationToken);
+                return true;
             }
             if (exception is UnauthorizedAccessException)
             {
@@ -42,34 +49,34 @@ namespace DigiLine.API.Middleware
             if (exception is ArgumentException or KeyNotFoundException or TimeZoneNotFoundException or InvalidTimeZoneException)
             {
                 httpContext.Response.StatusCode = exception is KeyNotFoundException ? 404 : 400;
-                await httpContext.Response.WriteAsJsonAsync(new ProblemDetails { Status = httpContext.Response.StatusCode, Title = "Request rejected", Detail = exception.Message }, cancellationToken);
+                await WriteProblem(httpContext, httpContext.Response.StatusCode,
+                    exception is KeyNotFoundException ? "The requested record was not found." : "The request is invalid.", exception.Message, cancellationToken);
                 return true;
             }
-            if (exception is not InvalidOperationException)
+            if (exception is InvalidOperationException invalidOperation)
             {
-                return false;
+                _logger.LogWarning(exception, "Request conflict for {Path}.", path);
+                await WriteProblem(httpContext, StatusCodes.Status409Conflict,
+                    "The action conflicts with the current state.", invalidOperation.Message, cancellationToken);
+                return true;
             }
 
-            _logger.LogWarning(
-                exception,
-                "Booking request was rejected.");
-
-            var problemDetails = new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Booking request was rejected.",
-                Detail = exception.Message,
-                Instance = httpContext.Request.Path
-            };
-
-            httpContext.Response.StatusCode =
-                StatusCodes.Status400BadRequest;
-
-            await httpContext.Response.WriteAsJsonAsync(
-                problemDetails,
-                cancellationToken);
-
+            _logger.LogError(exception, "Unhandled request failure for {Path}.", path);
+            await WriteProblem(httpContext, StatusCodes.Status500InternalServerError,
+                "The request could not be completed.", "An unexpected error occurred. Please try again.", cancellationToken);
             return true;
+        }
+
+        private static async Task WriteProblem(HttpContext context, int status, string title, string detail, CancellationToken cancellationToken)
+        {
+            context.Response.StatusCode = status;
+            await context.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Status = status,
+                Title = title,
+                Detail = detail,
+                Instance = context.Request.Path
+            }, cancellationToken);
         }
     }
 }

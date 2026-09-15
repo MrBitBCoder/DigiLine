@@ -42,7 +42,7 @@ public sealed class ProductionWorkflowTests : IClassFixture<ProductionWorkflowTe
         Assert.Equal(new[]{StaffRole.Doctor,StaffRole.Admin},saved.Roles.Select(x=>x.Role).OrderBy(x=>x));
         Assert.False(await db.StaffInvitations.AnyAsync(x=>x.StaffId==staff.Id));Assert.Equal("",mail.Token);
         Assert.True(await db.AdministrationAudits.AnyAsync(x=>x.StaffId==staff.Id && x.Action=="Staff created"));
-        await Assert.ThrowsAsync<ArgumentException>(()=>Admin(db).CreateAsync(f.Clinic,f.Owner,new("Duplicate",saved.Email,[StaffRole.Receptionist],Password),default));
+        await Assert.ThrowsAsync<DigiLine.Application.Common.ApplicationConflictException>(()=>Admin(db).CreateAsync(f.Clinic,f.Owner,new("Duplicate",saved.Email,[StaffRole.Receptionist],Password),default));
     }
     [Fact]
     public async Task InvitationExpiryResendRevocationAndDeliveryFailure()
@@ -86,7 +86,7 @@ public sealed class ProductionWorkflowTests : IClassFixture<ProductionWorkflowTe
     public async Task ConcurrentDuplicateRegistrationHasOneWinner()
     {
         var suffix=Guid.NewGuid().ToString("N");
-        async Task<bool> Register(){await using var db=database.Open();try{await Admin(db).RegisterAsync(new("Duplicate",suffix,"Asia/Kolkata","Owner",$"{suffix}@example.test",Password,false),default);return true;}catch(ArgumentException){return false;}}
+        async Task<bool> Register(){await using var db=database.Open();try{await Admin(db).RegisterAsync(new("Duplicate",suffix,"Asia/Kolkata","Owner",$"{suffix}@example.test",Password,false),default);return true;}catch(DigiLine.Application.Common.ApplicationConflictException){return false;}}
         var results=await Task.WhenAll(Register(),Register());Assert.Single(results.Where(x=>x));
     }
     [Fact]

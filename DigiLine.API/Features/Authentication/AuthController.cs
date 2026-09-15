@@ -32,10 +32,10 @@ namespace DigiLine.API.Features.Authentication
         public async Task<IActionResult> ChangePassword(ChangePasswordRequest request, CancellationToken cancellationToken)
         {
             var subject = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-            if (!Guid.TryParse(subject, out var id)) return Unauthorized();
-            if (request.NewPassword != request.ConfirmPassword) return BadRequest("Passwords do not match.");
-            try { await _passwords!.ChangeAsync(id, request.CurrentPassword, request.NewPassword, cancellationToken); return NoContent(); }
-            catch (ArgumentException error) { return BadRequest(error.Message); }
+            if (!Guid.TryParse(subject, out var id)) return Problem(statusCode: 401, title: "Authentication is required.", detail: "Your session is invalid or expired.");
+            if (request.NewPassword != request.ConfirmPassword) return Problem(statusCode: 400, title: "The request is invalid.", detail: "Passwords do not match.");
+            await _passwords!.ChangeAsync(id, request.CurrentPassword, request.NewPassword, cancellationToken);
+            return NoContent();
         }
 
         [EnableRateLimiting("password-reset")]
@@ -51,10 +51,10 @@ namespace DigiLine.API.Features.Authentication
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(request.Token)) return BadRequest("This reset link is invalid or expired.");
-            if (request.NewPassword != request.ConfirmPassword) return BadRequest("Passwords do not match.");
-            try { await _passwords!.ResetAsync(request.Token, request.NewPassword, cancellationToken); return NoContent(); }
-            catch (ArgumentException error) { return BadRequest(error.Message); }
+            if (string.IsNullOrWhiteSpace(request.Token)) return Problem(statusCode: 400, title: "The request is invalid.", detail: "This reset link is invalid or expired.");
+            if (request.NewPassword != request.ConfirmPassword) return Problem(statusCode: 400, title: "The request is invalid.", detail: "Passwords do not match.");
+            await _passwords!.ResetAsync(request.Token, request.NewPassword, cancellationToken);
+            return NoContent();
         }
 
         [HttpPost("login")]
@@ -69,7 +69,7 @@ namespace DigiLine.API.Features.Authentication
 
             if (token is null)
             {
-                return Unauthorized();
+                return Problem(statusCode: 401, title: "Sign-in failed.", detail: "The email or password is incorrect.");
             }
 
             return Ok(new LoginResponse

@@ -8,6 +8,11 @@ public sealed record PublicBookingResult(
     int TokenNumber,
     bool WasAlreadyBooked);
 
+public sealed record PublicTokenRecoveryResult(
+    Guid SessionId,
+    Guid TokenId,
+    int TokenNumber);
+
 public sealed record PublicTokenState(
     Guid SessionId,
     Guid TokenId,

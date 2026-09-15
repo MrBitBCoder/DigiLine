@@ -35,6 +35,8 @@ public sealed class ManageDoctorSessionServiceTests
             new CreateDoctorSessionRequest("Updated", start, start.AddHours(1), 20, opening));
 
         Assert.Equal(opening, session.BookingOpenTime);
+        Assert.Equal(start, session.StartTime);
+        Assert.Equal(start.AddHours(1), session.EndTime);
         Assert.False(session.IsBookingOpen(opening.AddTicks(-1)));
         Assert.True(session.IsBookingOpen(opening));
     }

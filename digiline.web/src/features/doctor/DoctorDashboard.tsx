@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError } from "../../api/httpClient";
+import { ApiError, getApiErrorMessage } from "../../api/httpClient";
 
 import {
 
@@ -19,6 +19,8 @@ import {
   LoadingState,
 
   StatusBadge,
+
+  useToast,
 
   type TableColumn,
 
@@ -69,31 +71,21 @@ function errorMessage(error: unknown) {
 }
 
 function actionErrorMessage(error: unknown) {
+  return getApiErrorMessage(error, "The queue action could not be completed.");
+}
 
-  if (
-
-    error instanceof ApiError &&
-
-    typeof error.details === "object" &&
-
-    error.details &&
-
-    "detail" in error.details
-
-  )
-
-    return String(error.details.detail);
-
-  if (error instanceof ApiError && error.status === 403)
-
-    return "You do not have permission to perform this action.";
-
-  return error instanceof Error
-
-    ? error.message
-
-    : "The queue action could not be completed.";
-
+function actionSuccessMessage(actionKey: string) {
+  if (actionKey === "start-session") return "Session started.";
+  if (actionKey === "pause-session") return "Session paused.";
+  if (actionKey === "resume-session") return "Session resumed.";
+  if (actionKey === "stop-booking") return "Booking stopped. No new patients can join.";
+  if (actionKey === "complete-session") return "Session completed.";
+  if (actionKey === "call-next") return "Next patient called.";
+  if (actionKey.startsWith("recall-")) return "Patient called again.";
+  if (actionKey.startsWith("skip-")) return "Patient skipped.";
+  if (actionKey.startsWith("complete-")) return "Consultation completed.";
+  if (actionKey.startsWith("late-")) return "Patient marked as arrived.";
+  return "Queue updated.";
 }
 
 const realtimeLabels: Record<RealtimeStatus, string> = {
@@ -125,6 +117,8 @@ interface Confirmation {
 
 
 export function DoctorDashboard({ initialSessionId }: { initialSessionId?: string | null } = {}) {
+
+  const toast = useToast();
 
   const [details, setDetails] = useState<DoctorSessionDetails | null>(null);
 
@@ -284,11 +278,17 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
       setDetails(next); setPage(next.page ?? 1);
 
+      toast.success(actionSuccessMessage(actionKey));
+
       return true;
 
     } catch (caught) {
 
-      setActionError(actionErrorMessage(caught));
+      const message = actionErrorMessage(caught);
+
+      if (caught instanceof ApiError && caught.status === 409 && /already/i.test(message)) toast.warning(message);
+
+      else toast.error(message);
 
       return false;
 

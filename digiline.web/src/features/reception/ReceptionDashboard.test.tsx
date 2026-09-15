@@ -7,6 +7,7 @@ import type {
 } from "../../shared/types/domain";
 import { ReceptionDashboard } from "./ReceptionDashboard";
 import { ApiError } from "../../api/httpClient";
+import { ToastProvider } from "../../shared/ui";
 
 const api = vi.hoisted(() => ({
   today: vi.fn(),
@@ -82,7 +83,7 @@ describe("ReceptionDashboard", () => {
   });
   it("renders today summary and doctor availability", async () => {
     api.today.mockResolvedValue(fixture());
-    render(<ReceptionDashboard />);
+    render(<ToastProvider><ReceptionDashboard /></ToastProvider>);
     expect(await screen.findByText("Reception desk")).toBeInTheDocument();
     expect(screen.getByText("Doctor available")).toBeInTheDocument();
     expect(screen.getByText("9999999999")).toBeInTheDocument();
@@ -102,13 +103,14 @@ describe("ReceptionDashboard", () => {
     api.today.mockResolvedValue(fixture());
     api.walkIn.mockResolvedValue({ tokenNumber: 12 });
     const user = userEvent.setup();
-    render(<ReceptionDashboard />);
+    render(<ToastProvider><ReceptionDashboard /></ToastProvider>);
     await user.type(await screen.findByLabelText(/Patient name/), "Asha");
     await user.type(screen.getByLabelText(/^Age/), "34");
     const button = screen.getByRole("button", { name: "Issue token" });
     await user.dblClick(button);
     await waitFor(() => expect(api.walkIn).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Token #12")).toBeInTheDocument();
+    expect(screen.getByText("Walk-in patient added successfully.")).toBeInTheDocument();
   });
   it("registers a walk-in with an optional phone number", async () => {
     api.today.mockResolvedValue(fixture());
@@ -126,7 +128,7 @@ describe("ReceptionDashboard", () => {
     api.today.mockResolvedValue(fixture());
     api.walkIn.mockRejectedValue(new ApiError("One or more validation errors occurred.", 400, { errors: { WalkInName: ["Name is invalid."] } }));
     const user = userEvent.setup();
-    render(<ReceptionDashboard />);
+    render(<ToastProvider><ReceptionDashboard /></ToastProvider>);
     await user.type(await screen.findByLabelText(/Patient name/), "Asha");
     await user.type(screen.getByLabelText(/^Age/), "34");
     await user.click(screen.getByRole("button", { name: "Issue token" }));

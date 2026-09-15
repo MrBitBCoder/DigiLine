@@ -92,7 +92,7 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
         var created = await Json(await factory.Doctor.PostAsJsonAsync("/api/doctor/sessions", new { name="Start before stop",startTime=start,endTime=start.AddHours(1),averageConsultationMinutes=5 }));
         var id = created.GetProperty("id").GetGuid();
         var rejected = await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/stop-booking",null);
-        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,rejected.StatusCode);
         Assert.Contains("running or paused",await rejected.Content.ReadAsStringAsync());
         await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/start",null));
         await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/stop-booking",null));
@@ -106,7 +106,7 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
     {
         var id=await Session(); await Json(await WalkIn(id));
         Assert.Equal(HttpStatusCode.OK,(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/stop-booking",null)).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest,(await WalkIn(id)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await WalkIn(id)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict,(await factory.Doctor.PostAsJsonAsync($"/api/doctor/sessions/{id}/complete",new {confirmSkipped=true})).StatusCode);
         var called=await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/queue/call-next",null)); var token=called.GetProperty("id").GetGuid();
         await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/tokens/{token}/skip",null));
@@ -118,7 +118,7 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
         var reception = await Json(await factory.Reception.GetAsync($"/api/reception/sessions/{id}"));
         Assert.Equal(5, reception.GetProperty("session").GetProperty("status").GetInt32());
         var finished=details.GetProperty("queue")[0]; Assert.Equal(8,finished.GetProperty("status").GetInt32()); Assert.Equal(JsonValueKind.Null,finished.GetProperty("completedAt").ValueKind); Assert.NotEqual(JsonValueKind.Null,finished.GetProperty("finalizedAt").ValueKind);
-        Assert.Equal(HttpStatusCode.BadRequest,(await factory.Reception.PostAsync($"/api/reception/sessions/{id}/tokens/{token}/late",null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await factory.Reception.PostAsync($"/api/reception/sessions/{id}/tokens/{token}/late",null)).StatusCode);
         await Json(await factory.Doctor.PostAsJsonAsync($"/api/doctor/sessions/{id}/complete",new {confirmSkipped=true}));
     }
     [Fact]
@@ -133,7 +133,7 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
         await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/queue/call-next",null));
         await Json(await factory.Reception.PostAsync($"/api/reception/sessions/{id}/tokens/{token}/recall",null));
         await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/tokens/{token}/complete",null));
-        Assert.Equal(HttpStatusCode.BadRequest,(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/tokens/{token}/complete",null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/tokens/{token}/complete",null)).StatusCode);
         await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/pause",null));
         await Json(await factory.Doctor.PostAsJsonAsync($"/api/doctor/sessions/{id}/complete",new {confirmSkipped=true}));
     }

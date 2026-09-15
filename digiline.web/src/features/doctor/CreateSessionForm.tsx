@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { ApiError } from "../../api/httpClient";
-import { Button, Card, TextField } from "../../shared/ui";
+import { getApiErrorMessage } from "../../api/httpClient";
+import { Button, Card, TextField, useToast } from "../../shared/ui";
 import { doctorApi } from "./doctorApi";
 import type { DoctorSessionSummary } from "../../shared/types/domain";
 import { clinicDateTimeInput, clinicInputToUtc, defaultClinicTimeZone } from "../../shared/clinicTime";
 
 export function CreateSessionForm({ onSaved, session, onCancel, timeZoneId = defaultClinicTimeZone }: { onSaved: (id: string) => Promise<void>; session?: DoctorSessionSummary; onCancel?: () => void; timeZoneId?: string }) {
+  const toast = useToast();
   const [name, setName] = useState(session?.name ?? "");
   const [bookingOpenTime, setBookingOpenTime] = useState(session ? clinicDateTimeInput(session.bookingOpenTime, timeZoneId) : "");
   const [startTime, setStartTime] = useState(session ? clinicDateTimeInput(session.startTime, timeZoneId) : "");
@@ -52,14 +53,13 @@ export function CreateSessionForm({ onSaved, session, onCancel, timeZoneId = def
       const id = session ? (await doctorApi.updateSession(session.id, details), session.id)
         : (await doctorApi.createSession(details)).id;
       await onSaved(id);
+      toast.success(session ? "Session updated." : "Session created.");
       setName("");
       setBookingOpenTime("");
       setStartTime("");
       setEndTime("");
     } catch (caught) {
-      const detail = caught instanceof ApiError && typeof caught.details === "object" && caught.details && "detail" in caught.details
-        ? String(caught.details.detail) : null;
-      setError(detail ?? (caught instanceof Error ? caught.message : "Could not create the session."));
+      toast.error(getApiErrorMessage(caught, "Could not save the session."));
     } finally {
       setBusy(false);
     }

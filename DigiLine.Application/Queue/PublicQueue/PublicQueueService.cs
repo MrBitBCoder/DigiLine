@@ -29,6 +29,19 @@ public sealed class PublicQueueService : IPublicQueueService
         return new PublicBookingResult(sessionId, created.Id, number, false);
     }
 
+    public async Task<PublicTokenRecoveryResult?> RecoverAsync(string accessToken, Guid sessionId, Guid patientProfileId, CancellationToken cancellationToken = default)
+    {
+        var phone = _access.GetPhoneNumber(accessToken)
+            ?? throw new UnauthorizedAccessException("Patient access has expired.");
+        if (!await _patients.IsOwnedByPhoneAsync(patientProfileId, phone, cancellationToken)) return null;
+        var session = await _sessions.GetByIdAsync(sessionId, cancellationToken);
+        if (session is null || session.Status == SessionStatus.Closed) return null;
+        var matches = await _tokens.GetRecoverableByPatientAsync(sessionId, patientProfileId, cancellationToken);
+        if (matches.Count != 1) return null;
+        var token = matches[0];
+        return new PublicTokenRecoveryResult(sessionId, token.Id, token.TokenNumber);
+    }
+
     public async Task<PublicTokenState?> GetTokenAsync(string accessToken, Guid sessionId, Guid tokenId, CancellationToken cancellationToken = default)
     {
         var phone = _access.GetPhoneNumber(accessToken) ?? throw new UnauthorizedAccessException("Patient access has expired.");

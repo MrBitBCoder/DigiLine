@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
-import { ApiError } from "../../api/httpClient";
+import { ApiError, getApiErrorMessage } from "../../api/httpClient";
 import { usePublicQueueRealtime, type RealtimeStatus } from "../../realtime";
 import {
   Button,
@@ -10,6 +10,7 @@ import {
   LoadingState,
   StatusBadge,
   TextField,
+  useToast,
 } from "../../shared/ui";
 import type {
   PublicBookingResult,
@@ -54,6 +55,7 @@ export function PublicClinicEntryPage() {
   const { clinicSlug = "" } = useParams();
   const [clinic, setClinic] = useState<PublicClinicDetails | null>(null);
   const [selected, setSelected] = useState<PublicSessionSummary | null>(null);
+  const [recoverySession, setRecoverySession] = useState<PublicSessionSummary | null>(null);
   const [storedToken, setStoredToken] = useState<StoredToken | null>(() =>
     readStored(clinicSlug),
   );
@@ -129,7 +131,7 @@ export function PublicClinicEntryPage() {
         />
       </PublicShell>
     );
-  const visibleSessions = clinic.sessions.filter(session => session.status === "Running" || session.status === "Paused" || (session.status === "BookingOpen" && session.isBookingOpen));
+  const visibleSessions = clinic.sessions.filter(session => session.status === "Running" || session.status === "Paused" || session.status === "BookingOpen");
   return (
     <PublicShell clinicName={clinic.name} compact>
       <div className="public-home-content">
@@ -154,12 +156,12 @@ export function PublicClinicEntryPage() {
             {visibleSessions.map((session) => (
               <Card key={session.id} className="public-session-card">
                 <div>
-                  <span className="public-live-label"><span aria-hidden="true" /> {session.isBookingOpen ? "Booking open" : "Booking closed"}{session.status === "Paused" ? " · Doctor paused" : ""}</span>
+                  <span className="public-live-label"><span aria-hidden="true" /> {bookingStatusMessage(session, clinic.timeZoneId)}{session.status === "Paused" ? " · Doctor paused" : ""}</span>
                   <h3>{session.name}</h3>
-                  <p>
-                    {formatClinicTime(session.startTime, clinic.timeZoneId)} –{" "}
-                    {formatClinicTime(session.endTime, clinic.timeZoneId)}
-                  </p>
+                  <div className="public-session-timing">
+                    <p><strong>Clinic time:</strong> {formatClinicTime(session.startTime, clinic.timeZoneId)} – {formatClinicTime(session.endTime, clinic.timeZoneId)}</p>
+                    <p><strong>Booking starts:</strong> {formatClinicTime(session.bookingOpenTime, clinic.timeZoneId)}</p>
+                  </div>
                 </div>
                 <dl>
                   <div>
@@ -176,6 +178,12 @@ export function PublicClinicEntryPage() {
                   </div>
                 </dl>
                 <Button disabled={!session.isBookingOpen} onClick={() => setSelected(session)}>Join queue</Button>
+                {!session.isBookingOpen && (session.status === "Running" || session.status === "Paused") && (
+                  <div className="token-recovery-action">
+                    <span>Already joined this session?</span>
+                    <Button variant="secondary" onClick={() => setRecoverySession(session)}>Find my token</Button>
+                  </div>
+                )}
               </Card>
             ))}
           </div>
@@ -199,8 +207,23 @@ export function PublicClinicEntryPage() {
           }}
         />
       )}
+      {recoverySession && (
+        <RecoveryPanel session={recoverySession} onCancel={() => setRecoverySession(null)}
+          onRecovered={(patientAccess, recovered) => {
+            const value: StoredToken = { ...recovered, wasAlreadyBooked: true, accessToken: patientAccess.accessToken,
+              accessExpiresAt: patientAccess.expiresAt, clinicSlug };
+            sessionStorage.setItem(TOKEN_STORAGE, JSON.stringify(value));
+            setStoredToken(value);
+          }} />
+      )}
     </PublicShell>
   );
+}
+function bookingStatusMessage(session: PublicSessionSummary, timeZoneId?: string) {
+  if (session.isBookingOpen) return "Booking is currently open";
+  if (Date.now() < Date.parse(session.bookingOpenTime))
+    return `Booking opens at ${formatClinicTime(session.bookingOpenTime, timeZoneId)}`;
+  return "Booking has closed for this session";
 }
 
 function PublicShell({
@@ -229,6 +252,65 @@ function PublicShell({
   );
 }
 
+function RecoveryPanel({ session, onCancel, onRecovered }: {
+  session: PublicSessionSummary;
+  onCancel: () => void;
+  onRecovered: (access: VerifiedPatientAccess, result: { sessionId: string; tokenId: string; tokenNumber: number }) => void;
+}) {
+  const toast = useToast();
+  const [stage, setStage] = useState<"phone" | "code" | "profile">("phone");
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [challengeId, setChallengeId] = useState("");
+  const [developmentCode, setDevelopmentCode] = useState("");
+  const [access, setAccess] = useState<VerifiedPatientAccess | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function requestCode(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError("");
+    try {
+      const result = await publicClinicApi.requestVerification(phone);
+      setChallengeId(result.challengeId); setDevelopmentCode(result.developmentCode ?? ""); setStage("code");
+    } catch (caught) { toast.error(getApiErrorMessage(caught)); }
+    finally { setBusy(false); }
+  }
+  async function verify(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError("");
+    try { setAccess(await publicClinicApi.confirmVerification(challengeId, code)); setStage("profile"); }
+    catch { setError("The verification code is invalid or expired."); }
+    finally { setBusy(false); }
+  }
+  async function recover(profile: PublicPatientProfile) {
+    if (!access) return;
+    setBusy(true); setError("");
+    try {
+      const recovered = await publicClinicApi.recover(access.accessToken, session.id, profile.id);
+      onRecovered(access, recovered);
+      toast.success(`Token #${recovered.tokenNumber} restored.`);
+    }
+    catch (caught) { toast.error(caught instanceof ApiError && caught.status === 404
+      ? "We couldn't find an active token for this patient in this session."
+      : getApiErrorMessage(caught)); }
+    finally { setBusy(false); }
+  }
+  return <div className="booking-backdrop">
+    <Card className="booking-panel" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
+      <div className="booking-heading"><div><span className="eyebrow">Already joined?</span><h2 id="recovery-title">Find my token</h2></div>
+        <button type="button" aria-label="Close" onClick={onCancel}>×</button></div>
+      <p>This only finds a token already issued for {session.name}. It will not create a new token.</p>
+      {stage === "phone" && <form onSubmit={requestCode}><TextField label="Phone number" type="tel" autoComplete="tel" value={phone} onChange={event => setPhone(event.target.value)} required />
+        <Button busy={busy}>Send verification code</Button></form>}
+      {stage === "code" && <form onSubmit={verify}><TextField label="6-digit code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={event => setCode(event.target.value)} required />
+        {developmentCode && <p className="dev-code">Development code: <strong>{developmentCode}</strong></p>}<Button busy={busy}>Verify</Button></form>}
+      {stage === "profile" && <div className="profile-step">
+        {access?.profiles.length ? access.profiles.map(profile => <button type="button" disabled={busy} className="profile-choice" key={profile.id} onClick={() => void recover(profile)}>
+          <strong>{profile.name}</strong><span>Age {profile.age}</span></button>) : <p>No patient profiles are registered for this phone number.</p>}
+      </div>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </Card>
+  </div>;
+}
+
 function BookingPanel({
   session,
   timeZoneId,
@@ -243,6 +325,7 @@ function BookingPanel({
     result: PublicBookingResult,
   ) => void;
 }) {
+  const toast = useToast();
   const [stage, setStage] = useState<"phone" | "code" | "profile" | "confirm">(
     "phone",
   );
@@ -266,7 +349,7 @@ function BookingPanel({
       setDevelopmentCode(result.developmentCode ?? "");
       setStage("code");
     } catch (caught) {
-      setError(message(caught));
+      setError(getApiErrorMessage(caught));
     } finally {
       setBusy(false);
     }
@@ -302,7 +385,7 @@ function BookingPanel({
       setProfile(created);
       setStage("confirm");
     } catch (caught) {
-      setError(message(caught));
+      setError(getApiErrorMessage(caught));
     } finally {
       setBusy(false);
     }
@@ -312,12 +395,15 @@ function BookingPanel({
     setBusy(true);
     setError("");
     try {
+      const booking =
+        await publicClinicApi.book(access.accessToken, session.id, profile.id);
       onBooked(
         access,
-        await publicClinicApi.book(access.accessToken, session.id, profile.id),
+        booking,
       );
+      toast.success(booking.wasAlreadyBooked ? "Your existing token was restored." : `You joined the queue with token #${booking.tokenNumber}.`);
     } catch (caught) {
-      setError(message(caught));
+      toast.error(getApiErrorMessage(caught));
       setBusy(false);
     }
   }
@@ -572,15 +658,4 @@ function ActiveTokenScreen({
       </section>
     </PublicShell>
   );
-}
-
-function message(caught: unknown) {
-  if (
-    caught instanceof ApiError &&
-    typeof caught.details === "object" &&
-    caught.details &&
-    "detail" in caught.details
-  )
-    return String(caught.details.detail);
-  return caught instanceof Error ? caught.message : "Please try again.";
 }

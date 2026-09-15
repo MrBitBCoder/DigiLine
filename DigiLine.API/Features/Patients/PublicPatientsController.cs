@@ -1,6 +1,7 @@
 using DigiLine.Application.Patients;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace DigiLine.API.Features.Patients;
 
@@ -14,7 +15,7 @@ public sealed class PublicPatientsController : ControllerBase
     public PublicPatientsController(IPublicPatientService patients, IWebHostEnvironment environment)
     { _patients = patients; _environment = environment; }
 
-    [HttpPost("verification")]
+    [HttpPost("verification"), EnableRateLimiting("patient-recovery")]
     public IActionResult RequestVerification(RequestVerificationRequest request)
     {
         var challenge = _patients.RequestVerification(request.PhoneNumber);

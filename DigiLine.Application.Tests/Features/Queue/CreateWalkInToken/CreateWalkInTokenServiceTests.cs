@@ -225,13 +225,17 @@ public class CreateWalkInTokenServiceTests
         if (paused) session.Pause();
         session.StopBooking(DateTime.UtcNow);
         var repository = new InMemoryQueueTokenRepository();
+        var existingToken = new QueueToken(session.Id, 1, Guid.NewGuid());
+        repository.Tokens.Add(existingToken);
+        var existingStatus = existingToken.Status;
         var transactions = new StubTransactionManager();
         var patient = new PatientProfile(Guid.NewGuid(), "Patient", 30);
         var service = new BookTokenService(new AtomicTokenNumberService(), repository,
             new StubSessionRepository(session), new StubPatientProfileRepository(patient), transactions);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.BookAsync(session.Id, patient.Id));
         Assert.Equal("Booking is not currently open for this session.", error.Message);
-        Assert.Empty(repository.Tokens);
+        Assert.Same(existingToken, Assert.Single(repository.Tokens));
+        Assert.Equal(existingStatus, existingToken.Status);
         Assert.False(transactions.Transaction.Committed);
         var walkIn = new Fixture(session);
         await Assert.ThrowsAsync<InvalidOperationException>(() => walkIn.Service.CreateAsync(session.Id, "New patient", null));

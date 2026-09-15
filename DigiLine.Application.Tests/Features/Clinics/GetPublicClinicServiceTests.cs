@@ -57,6 +57,26 @@ public class GetPublicClinicServiceTests
             result.Sessions.Select(session => session.Status));
     }
 
+    [Fact]
+    public async Task GetAsync_ShowsUpcomingBookingWithAuthoritativeSessionTimes()
+    {
+        var bookingOpen = Now.AddHours(1);
+        var start = Now.AddHours(2);
+        var end = Now.AddHours(5);
+        var record = new PublicSessionRecord(Guid.NewGuid(), "Afternoon", bookingOpen, start,
+            end, end, SessionStatus.BookingOpen, []);
+
+        var result = await new GetPublicClinicService(new StubRepository(new PublicClinicRecord(
+            Guid.NewGuid(), "Clinic", "clinic", [record], "Asia/Kolkata")), new TestClock(Now)).GetAsync("clinic");
+
+        var session = Assert.Single(result!.Sessions);
+        Assert.False(session.IsBookingOpen);
+        Assert.Equal(bookingOpen, session.BookingOpenTime);
+        Assert.Equal(start, session.StartTime);
+        Assert.Equal(end, session.EndTime);
+        Assert.Equal("Asia/Kolkata", result.TimeZoneId);
+    }
+
     [Theory]
     [InlineData(SessionStatus.Running)]
     [InlineData(SessionStatus.Paused)]
