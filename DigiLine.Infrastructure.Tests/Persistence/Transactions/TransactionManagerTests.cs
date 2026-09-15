@@ -21,7 +21,7 @@ namespace DigiLine.Infrastructure.Tests
                 .Build();
 
             var connectionString =
-                configuration.GetConnectionString("DigiLine");
+                Environment.GetEnvironmentVariable("DIGILINE_TEST_CONNECTION") ?? configuration.GetConnectionString("DigiLine");
 
             if (string.IsNullOrWhiteSpace(connectionString))
             {

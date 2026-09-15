@@ -27,7 +27,7 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
             return await _dbContext.QueueTokens
                 .AsNoTracking()
                 .Where(token => token.SessionId == sessionId)
-                .OrderBy(token => token.TokenNumber)
+                .OrderBy(token => token.QueueOrder)
                 .ToListAsync(cancellationToken);
         }
 
@@ -48,7 +48,7 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
                     WHERE SessionId = {sessionId}
                       AND Status IN ({QueueTokenStatus.Waiting}, {QueueTokenStatus.Late})
                     ORDER BY
-                        CASE WHEN Status = {QueueTokenStatus.Waiting} THEN 0 ELSE 1 END,
+                        QueueOrder,
                         TokenNumber
                     """)
                 .SingleOrDefaultAsync(cancellationToken);
@@ -64,6 +64,19 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
                     token => token.SessionId == sessionId
                         && token.Id == tokenId,
                     cancellationToken);
+        }
+
+        public Task<QueueToken?> GetByIdForUpdateAsync(
+            Guid sessionId,
+            Guid tokenId,
+            CancellationToken cancellationToken = default)
+        {
+            if (_dbContext.Database.CurrentTransaction is null)
+                throw new InvalidOperationException("Late arrival requires an active transaction.");
+            return _dbContext.QueueTokens.FromSqlInterpolated($"""
+                SELECT * FROM QueueTokens WITH (UPDLOCK, HOLDLOCK)
+                WHERE SessionId = {sessionId} AND Id = {tokenId}
+                """).SingleOrDefaultAsync(cancellationToken);
         }
 
         public Task<QueueToken?> GetActiveByPatientAsync(
@@ -96,7 +109,7 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
             var connection = _dbContext.Database.GetDbConnection();
 
             var transaction = _dbContext.Database.CurrentTransaction;
-           
+
             await using var command = connection.CreateCommand();
 
             command.CommandText = """
@@ -130,6 +143,31 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
             }
 
             return Convert.ToInt32(result);
+        }
+
+        public async Task<long?> AllocateNextQueueOrderAsync(
+            Guid sessionId,
+            CancellationToken cancellationToken = default)
+        {
+            var connection = _dbContext.Database.GetDbConnection();
+            var transaction = _dbContext.Database.CurrentTransaction
+                ?? throw new InvalidOperationException("Queue order allocation requires an active transaction.");
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE Sessions
+                SET NextQueueOrder = NextQueueOrder + 1
+                OUTPUT INSERTED.NextQueueOrder - 1
+                WHERE Id = @SessionId;
+                """;
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "@SessionId";
+            parameter.Value = sessionId;
+            command.Parameters.Add(parameter);
+            if (connection.State != System.Data.ConnectionState.Open)
+                await connection.OpenAsync(cancellationToken);
+            command.Transaction = transaction.GetDbTransaction();
+            var result = await command.ExecuteScalarAsync(cancellationToken);
+            return result is null or DBNull ? null : Convert.ToInt64(result);
         }
 
         public async Task AddAsync(

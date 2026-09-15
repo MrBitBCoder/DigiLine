@@ -31,6 +31,6 @@ namespace DigiLine.Application.Queue
                         "Session was not found.");
             //return (maximumTokenNumber ?? 0) + 1;
         }
-        
+
     }
 }

@@ -1,0 +1,59 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: digiline-sqlserver
+
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+
+
+    ports:
+      - "1433:1433"
+
+    volumes:
+      - digiline-sql-data:/var/opt/mssql
+
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: digiline-api
+
+    depends_on:
+      - sqlserver
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      Cors__AllowedOrigins__0: "http://localhost:3000"
+      JwtSettings__SecretKey: "${JWT_SECRET_KEY}"
+      ConnectionStrings__DigiLine: "Server=sqlserver,1433;Database=DigiLineDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;"
+
+    ports:
+      - "8080:8080"
+
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./digiline.web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: "http://localhost:8080"
+        VITE_SIGNALR_URL: "http://localhost:8080/hubs/queue"
+        VITE_PUBLIC_SIGNALR_URL: "http://localhost:8080/hubs/public-queue"
+
+    container_name: digiline-frontend
+
+    ports:
+      - "3000:80"
+
+    depends_on:
+      - api
+
+    restart: unless-stopped
+volumes:
+  digiline-sql-data:

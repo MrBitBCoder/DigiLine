@@ -10,6 +10,23 @@ namespace DigiLine.Application.Tests;
 public class CreateWalkInTokenServiceTests
 {
     [Fact]
+    public async Task CreateAsync_PersistsRequiredReceptionAge()
+    {
+        var fixture = new Fixture(CreateOpenSession());
+        await fixture.Service.CreateAsync(fixture.Session.Id, "Jane Doe", null, default, 34);
+        Assert.Equal(34, Assert.Single(fixture.QueueTokenRepository.Tokens).WalkInAge);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsOutOfRangeAge()
+    {
+        var fixture = new Fixture(CreateOpenSession());
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Service.CreateAsync(fixture.Session.Id, "Jane Doe", null, default, 131));
+        Assert.Empty(fixture.QueueTokenRepository.Tokens);
+    }
+
+    [Fact]
     public async Task CreateAsync_WithValidDetails_PersistsWalkInAndCommits()
     {
         var fixture = new Fixture(CreateOpenSession());
@@ -54,17 +71,33 @@ public class CreateWalkInTokenServiceTests
             fixture.Service.CreateAsync(Guid.NewGuid(), "Jane Doe", null));
 
         Assert.Equal("Session was not found.", exception.Message);
-        Assert.Equal(0, fixture.TransactionManager.BeginCount);
+        Assert.Equal(1, fixture.TransactionManager.BeginCount);
+        Assert.False(fixture.TransactionManager.Transaction.Committed);
         Assert.Empty(fixture.QueueTokenRepository.Tokens);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenSessionIsScheduled_RejectsToken()
+    {
+        var now = DateTime.UtcNow;
+        var session = new Session(Guid.NewGuid(), Guid.NewGuid(), "Unpublished",
+            now.AddMinutes(-30), now.AddMinutes(30), now.AddHours(2), now.AddHours(1), 10);
+        var fixture = new Fixture(session);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Service.CreateAsync(session.Id, "Jane Doe", null));
+
+        Assert.Equal("Booking is not currently open for this session.", error.Message);
+        Assert.Equal(1, fixture.TransactionManager.BeginCount);
+        Assert.False(fixture.TransactionManager.Transaction.Committed);
     }
 
     [Fact]
     public async Task CreateAsync_WhenSessionIsClosed_RejectsToken()
     {
         var session = CreateOpenSession();
-        session.OpenBooking();
         session.Start();
-        session.Close();
+        session.StopBooking(DateTime.UtcNow); session.CompleteSession(DateTime.UtcNow);
         var fixture = new Fixture(session);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -73,7 +106,8 @@ public class CreateWalkInTokenServiceTests
         Assert.Equal(
             "Cannot create a token for a closed session.",
             exception.Message);
-        Assert.Equal(0, fixture.TransactionManager.BeginCount);
+        Assert.Equal(1, fixture.TransactionManager.BeginCount);
+        Assert.False(fixture.TransactionManager.Transaction.Committed);
     }
 
     [Fact]
@@ -97,7 +131,8 @@ public class CreateWalkInTokenServiceTests
         Assert.Equal(
             "Booking is not currently open for this session.",
             exception.Message);
-        Assert.Equal(0, fixture.TransactionManager.BeginCount);
+        Assert.Equal(1, fixture.TransactionManager.BeginCount);
+        Assert.False(fixture.TransactionManager.Transaction.Committed);
     }
 
     [Fact]
@@ -119,6 +154,26 @@ public class CreateWalkInTokenServiceTests
             numbers.OrderBy(number => number));
         Assert.Equal(count, numbers.Distinct().Count());
         Assert.Equal(count, fixture.QueueTokenRepository.Tokens.Count);
+    }
+
+    [Fact]
+    public async Task PatientBooking_WhenSessionIsScheduled_RejectsToken()
+    {
+        var now = DateTime.UtcNow;
+        var session = new Session(Guid.NewGuid(), Guid.NewGuid(), "Unpublished",
+            now.AddMinutes(-30), now.AddMinutes(30), now.AddHours(2), now.AddHours(1), 10);
+        var patient = new PatientProfile(Guid.NewGuid(), "Registered Patient", 30);
+        var transactions = new StubTransactionManager();
+        var service = new BookTokenService(new AtomicTokenNumberService(),
+            new InMemoryQueueTokenRepository(), new StubSessionRepository(session),
+            new StubPatientProfileRepository(patient), transactions);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.BookAsync(session.Id, patient.Id));
+
+        Assert.Equal("Booking is not currently open for this session.", error.Message);
+        Assert.Equal(1, transactions.BeginCount);
+        Assert.False(transactions.Transaction.Committed);
     }
 
     [Fact]
@@ -163,7 +218,7 @@ public class CreateWalkInTokenServiceTests
     private static Session CreateOpenSession()
     {
         var now = DateTime.UtcNow;
-        return new Session(
+        var session = new Session(
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Open session",
@@ -172,6 +227,8 @@ public class CreateWalkInTokenServiceTests
             now.AddHours(2),
             now.AddHours(1),
             10);
+        session.OpenBooking();
+        return session;
     }
 
     private sealed class Fixture
@@ -246,6 +303,10 @@ public class CreateWalkInTokenServiceTests
             Guid sessionId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<int?>(null);
+
+        private long _nextQueueOrder;
+        public Task<long?> AllocateNextQueueOrderAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<long?>(Interlocked.Increment(ref _nextQueueOrder));
 
         public Task AddAsync(
             QueueToken queueToken,

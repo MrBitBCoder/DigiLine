@@ -1,137 +1,124 @@
+using System.Security.Claims;
 using DigiLine.API.Features.Sessions;
 using DigiLine.Application.Sessions;
 using DigiLine.Domain.Common;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DigiLine.API.Tests;
 
 public class PauseSessionEndpointTests
 {
-    [Fact]
-    public async Task Pause_ReturnsPausedSessionResult()
+    [Theory]
+    [InlineData("Start", SessionStatus.Running)]
+    [InlineData("Pause", SessionStatus.Paused)]
+    [InlineData("Resume", SessionStatus.Running)]
+    [InlineData("Close", SessionStatus.Closed)]
+    public async Task LifecycleAction_ReturnsResultAndPassesSessionId(string action, SessionStatus expectedStatus)
     {
+        var clinicId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
         var sessionId = Guid.NewGuid();
-        var pauseService = new StubPauseSessionService(
-            new PauseSessionResult(sessionId, SessionStatus.Paused));
-        var controller = new SessionsController(
-            new StubCreateSessionService(),
-            pauseService,
-            new StubResumeSessionService(null));
+        var lifecycle = new RecordingLifecycleService();
+        var controller = CreateController(lifecycle, new OwnedSessionQuery(clinicId, doctorId, sessionId), clinicId, doctorId);
 
-        var action = await controller.Pause(sessionId, CancellationToken.None);
+        var response = await Invoke(controller, action, sessionId);
 
-        var ok = Assert.IsType<OkObjectResult>(action);
-        var result = Assert.IsType<PauseSessionResult>(ok.Value);
+        var result = Assert.IsType<SessionLifecycleResult>(Assert.IsType<OkObjectResult>(response).Value);
         Assert.Equal(sessionId, result.SessionId);
-        Assert.Equal(SessionStatus.Paused, result.Status);
-        Assert.Equal(sessionId, pauseService.SessionId);
+        Assert.Equal(expectedStatus, result.Status);
+        Assert.Equal((action, sessionId), lifecycle.LastCall);
     }
 
-    [Fact]
-    public async Task Resume_ReturnsRunningSessionResult()
+    [Theory]
+    [InlineData("Start")]
+    [InlineData("Pause")]
+    [InlineData("Resume")]
+    [InlineData("Close")]
+    public async Task LifecycleAction_RejectsForeignSessionBeforeMutation(string action)
     {
-        var sessionId = Guid.NewGuid();
-        var resumeService = new StubResumeSessionService(
-            new ResumeSessionResult(sessionId, SessionStatus.Running));
-        var controller = new SessionsController(
-            new StubCreateSessionService(),
-            new StubPauseSessionService(null),
-            resumeService);
+        var clinicId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+        var lifecycle = new RecordingLifecycleService();
+        var controller = CreateController(lifecycle,
+            new OwnedSessionQuery(Guid.NewGuid(), doctorId, Guid.NewGuid()), clinicId, doctorId);
 
-        var action = await controller.Resume(sessionId, CancellationToken.None);
+        var response = await Invoke(controller, action, Guid.NewGuid());
 
-        var ok = Assert.IsType<OkObjectResult>(action);
-        var result = Assert.IsType<ResumeSessionResult>(ok.Value);
-        Assert.Equal(sessionId, result.SessionId);
-        Assert.Equal(SessionStatus.Running, result.Status);
-        Assert.Equal(sessionId, resumeService.SessionId);
+        Assert.IsType<NotFoundResult>(response);
+        Assert.Null(lifecycle.LastCall);
     }
 
-    [Fact]
-    public async Task Start_ReturnsRunningLifecycleResult()
+    private static Task<IActionResult> Invoke(SessionsController controller, string action, Guid sessionId) => action switch
     {
-        var sessionId = Guid.NewGuid();
-        var service = new StubStartSessionService(
-            new SessionLifecycleResult(sessionId, SessionStatus.Running));
-        var controller = new SessionsController(
-            new StubCreateSessionService(), new StubPauseSessionService(null),
-            new StubResumeSessionService(null), startSessionService: service);
+        "Start" => controller.Start(sessionId, CancellationToken.None),
+        "Pause" => controller.Pause(sessionId, CancellationToken.None),
+        "Resume" => controller.Resume(sessionId, CancellationToken.None),
+        "Close" => controller.Close(sessionId, CancellationToken.None),
+        _ => throw new ArgumentOutOfRangeException(nameof(action))
+    };
 
-        var action = await controller.Start(sessionId, CancellationToken.None);
+    private static SessionsController CreateController(
+        ISessionLifecycleService lifecycle, IGetDoctorSessionsService query, Guid clinicId, Guid doctorId) =>
+        new(lifecycle, new StubCreateService(), query)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim("clinic_id", clinicId.ToString()),
+                        new Claim(ClaimTypes.NameIdentifier, doctorId.ToString())
+                    ], "Test"))
+                }
+            }
+        };
 
-        var result = Assert.IsType<SessionLifecycleResult>(
-            Assert.IsType<OkObjectResult>(action).Value);
-        Assert.Equal(SessionStatus.Running, result.Status);
-        Assert.Equal(sessionId, service.SessionId);
+    private sealed class RecordingLifecycleService : ISessionLifecycleService
+    {
+        public (string Action, Guid SessionId)? LastCall { get; private set; }
+
+        private Task<SessionLifecycleResult> Record(string action, Guid id, SessionStatus status)
+        {
+            LastCall = (action, id);
+            return Task.FromResult(new SessionLifecycleResult(id, status));
+        }
+
+        public Task<SessionLifecycleResult> StartAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Record("Start", id, SessionStatus.Running);
+        public Task<SessionLifecycleResult> PauseAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Record("Pause", id, SessionStatus.Paused);
+        public Task<SessionLifecycleResult> ResumeAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Record("Resume", id, SessionStatus.Running);
+        public Task<SessionLifecycleResult> CloseAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Record("Close", id, SessionStatus.Closed);
     }
 
-    [Fact]
-    public async Task Close_ReturnsClosedLifecycleResult()
+    private sealed class StubCreateService : ICreateDoctorSessionService
     {
-        var sessionId = Guid.NewGuid();
-        var service = new StubCloseSessionService(
-            new SessionLifecycleResult(sessionId, SessionStatus.Closed));
-        var controller = new SessionsController(
-            new StubCreateSessionService(), new StubPauseSessionService(null),
-            new StubResumeSessionService(null), closeSessionService: service);
-
-        var action = await controller.Close(sessionId, CancellationToken.None);
-
-        var result = Assert.IsType<SessionLifecycleResult>(
-            Assert.IsType<OkObjectResult>(action).Value);
-        Assert.Equal(SessionStatus.Closed, result.Status);
-        Assert.Equal(sessionId, service.SessionId);
+        public Task<Guid> CreateAsync(Guid clinicId, Guid doctorId, CreateDoctorSessionRequest request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class StubPauseSessionService : IPauseSessionService
+    private sealed class OwnedSessionQuery(Guid clinicId, Guid doctorId, Guid sessionId) : IGetDoctorSessionsService
     {
-        private readonly PauseSessionResult? _result;
-        public StubPauseSessionService(PauseSessionResult? result) => _result = result;
-        public Guid SessionId { get; private set; }
+        public Task<IReadOnlyList<DoctorSessionSummary>> ListAsync(Guid clinic, Guid doctor,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<PauseSessionResult> PauseAsync(
-            Guid sessionId,
+        public Task<DoctorSessionDetails?> GetAsync(Guid id, Guid clinic, Guid doctor,
             CancellationToken cancellationToken = default)
         {
-            SessionId = sessionId;
-            return Task.FromResult(_result!);
+            if (id != sessionId || clinic != clinicId || doctor != doctorId)
+                return Task.FromResult<DoctorSessionDetails?>(null);
+            var now = DateTime.UtcNow;
+            var summary = new DoctorSessionSummary(id, clinic, "Clinic", doctor, "Doctor", "Morning",
+                now.AddHours(-1), now, now.AddHours(2), now.AddHours(2), 10,
+                SessionStatus.Running, true, new DoctorQueueSummary(null, 0, 0, 0, 0, 0));
+            return Task.FromResult<DoctorSessionDetails?>(new DoctorSessionDetails(summary, []));
         }
-    }
 
-    private sealed class StubResumeSessionService : IResumeSessionService
-    {
-        private readonly ResumeSessionResult? _result;
-        public StubResumeSessionService(ResumeSessionResult? result) => _result = result;
-        public Guid SessionId { get; private set; }
-
-        public Task<ResumeSessionResult> ResumeAsync(
-            Guid sessionId,
-            CancellationToken cancellationToken = default)
-        {
-            SessionId = sessionId;
-            return Task.FromResult(_result!);
-        }
-    }
-
-    private sealed class StubCreateSessionService : ICreateSessionService
-    {
-        public Task<Guid> CreateAsync(
-            CreateSessionRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-    }
-
-    private sealed class StubStartSessionService(SessionLifecycleResult result)
-        : IStartSessionService
-    {
-        public Guid SessionId { get; private set; }
-        public Task<SessionLifecycleResult> StartAsync(Guid sessionId, CancellationToken cancellationToken = default) { SessionId = sessionId; return Task.FromResult(result); }
-    }
-
-    private sealed class StubCloseSessionService(SessionLifecycleResult result)
-        : ICloseSessionService
-    {
-        public Guid SessionId { get; private set; }
-        public Task<SessionLifecycleResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default) { SessionId = sessionId; return Task.FromResult(result); }
+        public Task<DoctorSessionDetails?> GetActiveOrUpcomingAsync(Guid clinic, Guid doctor,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

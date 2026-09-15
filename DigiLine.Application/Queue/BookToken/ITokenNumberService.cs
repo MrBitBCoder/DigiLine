@@ -13,5 +13,5 @@ namespace DigiLine.Application.Queue
             CancellationToken cancellationToken = default);
     }
 
-  
+
 }

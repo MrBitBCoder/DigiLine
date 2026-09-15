@@ -37,9 +37,14 @@ namespace DigiLine.Infrastructure
             services.AddScoped<IPasswordHasher, PasswordHasher>();
 
             services.AddScoped<IAuthenticationService, AuthenticationService>();
+            services.AddScoped<DigiLine.Application.Administration.IAdministrationService, AdministrationService>();
+            services.AddScoped<IStaffPasswordService, StaffPasswordService>();
+            services.AddScoped<IStaffEmailSender, SmtpStaffEmailSender>();
 
+            services.AddScoped<IStaffSessionQueries, StaffSessionQueries>();
             services.AddScoped<ISessionRepository, SessionRepository>();
             services.AddScoped<IPublicClinicRepository, PublicClinicRepository>();
+            services.AddScoped<IClinicTimeZoneResolver, ClinicTimeZoneResolver>();
 
             services.AddScoped<IPatientProfileRepository, PatientProfileRepository>();
             services.AddScoped<IPublicPatientRepository, PublicPatientRepository>();

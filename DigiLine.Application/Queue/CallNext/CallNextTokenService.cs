@@ -27,6 +27,8 @@ public sealed class CallNextTokenService : ICallNextTokenService
         Guid sessionId,
         CancellationToken cancellationToken = default)
     {
+        await using var transaction = await _transactionManager.BeginAsync(
+            cancellationToken);
         var session = await _sessionRepository.GetByIdAsync(
             sessionId,
             cancellationToken);
@@ -42,8 +44,6 @@ public sealed class CallNextTokenService : ICallNextTokenService
                 "Call Next is only available for a running session.");
         }
 
-        await using var transaction = await _transactionManager.BeginAsync(
-            cancellationToken);
 
         var token = await _queueTokenRepository.GetNextWaitingForUpdateAsync(
             sessionId,

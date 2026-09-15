@@ -1,4 +1,5 @@
 using DigiLine.Domain.Common;
+using DigiLine.Domain.Entities;
 
 namespace DigiLine.Application.Sessions;
 
@@ -42,7 +43,7 @@ public sealed class GetDoctorSessionsService : IGetDoctorSessionsService
     }
 
     private static DoctorSessionDetails MapDetails(DoctorSessionRecord record, DateTime now) =>
-        new(MapSummary(record, now), record.Queue.OrderBy(token => token.TokenNumber).ToList());
+        new(MapSummary(record, now), record.Queue.OrderBy(token => token.QueueOrder).ThenBy(token => token.TokenNumber).ToList());
 
     private static DoctorSessionSummary MapSummary(DoctorSessionRecord record, DateTime now)
     {
@@ -54,11 +55,13 @@ public sealed class GetDoctorSessionsService : IGetDoctorSessionsService
             record.Id, record.ClinicId, record.ClinicName, record.DoctorId, record.DoctorName,
             record.Name, record.BookingOpenTime, record.StartTime, record.EndTime,
             record.LastBookingTime, record.AverageConsultationMinutes, record.Status,
-            record.Status != SessionStatus.Closed && now >= record.BookingOpenTime && now <= record.LastBookingTime,
+            SessionBookingAvailability.IsOpen(record.Status, record.BookingOpenTime, record.LastBookingTime, record.EndTime, now),
             new DoctorQueueSummary(
                 current,
                 record.Queue.Count(token => token.Status == QueueTokenStatus.Waiting),
                 record.Queue.Count(token => token.Status == QueueTokenStatus.Late),
-                record.Queue.Count));
+                record.Queue.Count,
+                record.Queue.Count(token => token.Status == QueueTokenStatus.Completed),
+                record.Queue.Count(token => token.Status is QueueTokenStatus.NoShow or QueueTokenStatus.Skipped)), record.TimeZoneId);
     }
 }

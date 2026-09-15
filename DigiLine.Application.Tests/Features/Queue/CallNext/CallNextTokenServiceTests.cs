@@ -40,7 +40,7 @@ public class CallNextTokenServiceTests
             fixture.Service.CallAsync(Guid.NewGuid()));
 
         Assert.Equal("Session was not found.", exception.Message);
-        Assert.Empty(fixture.Transactions.Transactions);
+        Assert.False(fixture.Transactions.Transactions.Single().Committed);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class CallNextTokenServiceTests
         Assert.Equal(
             "Call Next is only available for a running session.",
             exception.Message);
-        Assert.Empty(fixture.Transactions.Transactions);
+        Assert.False(fixture.Transactions.Transactions.Single().Committed);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class CallNextTokenServiceTests
         Assert.Equal(
             "Call Next is only available for a running session.",
             exception.Message);
-        Assert.Empty(fixture.Transactions.Transactions);
+        Assert.False(fixture.Transactions.Transactions.Single().Committed);
     }
 
     [Fact]
@@ -206,6 +206,7 @@ public class CallNextTokenServiceTests
         late.Call(DateTime.UtcNow.AddMinutes(-10));
         late.Skip();
         late.MarkLate();
+        late.AssignQueueOrder(3);
         var waiting = new QueueToken(session.Id, 2, "Waiting", null);
         var fixture = new Fixture(session, late, waiting);
 
@@ -228,6 +229,26 @@ public class CallNextTokenServiceTests
         Assert.Equal(earlierLate.Id, result.Id);
         Assert.Equal(QueueTokenStatus.Called, earlierLate.Status);
         Assert.Equal(QueueTokenStatus.Late, laterLate.Status);
+    }
+
+    [Fact]
+    public async Task CallAsync_ArrivedPatientPrecedesLaterBooking()
+    {
+        var session = CreateRunningSession();
+        var returned = CreateLateToken(session.Id, 1);
+        returned.AssignQueueOrder(4);
+        var first = new QueueToken(session.Id, 2, "First waiting", null);
+        first.AssignQueueOrder(2);
+        var second = new QueueToken(session.Id, 3, "Second waiting", null);
+        second.AssignQueueOrder(3);
+        var newcomer = new QueueToken(session.Id, 4, "New booking", null);
+        newcomer.AssignQueueOrder(5);
+        var fixture = new Fixture(session, newcomer, returned, second, first);
+
+        Assert.Equal(first.Id, (await fixture.Service.CallAsync(session.Id)).Id);
+        Assert.Equal(second.Id, (await fixture.Service.CallAsync(session.Id)).Id);
+        Assert.Equal(returned.Id, (await fixture.Service.CallAsync(session.Id)).Id);
+        Assert.Equal(newcomer.Id, (await fixture.Service.CallAsync(session.Id)).Id);
     }
 
     private static QueueToken CreateLateToken(Guid sessionId, int tokenNumber)
@@ -329,8 +350,7 @@ public class CallNextTokenServiceTests
                     .Where(token => token.SessionId == sessionId)
                     .Where(token => token.Status == QueueTokenStatus.Waiting
                         || token.Status == QueueTokenStatus.Late)
-                    .OrderBy(token =>
-                        token.Status == QueueTokenStatus.Waiting ? 0 : 1)
+                    .OrderBy(token => token.QueueOrder)
                     .ThenBy(token => token.TokenNumber)
                     .FirstOrDefault());
 

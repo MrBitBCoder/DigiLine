@@ -38,15 +38,31 @@ public class DoctorSessionQueryEndpointTests
         Assert.IsType<UnauthorizedResult>(result);
     }
 
+    [Fact]
+    public async Task Create_UsesAuthenticatedClinicAndDoctor()
+    {
+        var clinicId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+        var create = new StubCreateService();
+        var controller = CreateController(new StubQueryService(), clinicId, doctorId, create);
+        var start = DateTime.UtcNow.AddHours(2);
+
+        var result = await controller.Create(
+            new CreateDoctorSessionRequest("Morning", start, start.AddHours(2), 10), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(clinicId, create.ClinicId);
+        Assert.Equal(doctorId, create.DoctorId);
+    }
+
     private static SessionsController CreateController(
-        IGetDoctorSessionsService service, Guid? clinicId, Guid? doctorId)
+        IGetDoctorSessionsService service, Guid? clinicId, Guid? doctorId,
+        StubCreateService? create = null)
     {
         var claims = new List<Claim>();
         if (clinicId.HasValue) claims.Add(new Claim("clinic_id", clinicId.Value.ToString()));
         if (doctorId.HasValue) claims.Add(new Claim(ClaimTypes.NameIdentifier, doctorId.Value.ToString()));
-        return new SessionsController(
-            new StubCreateSessionService(), new StubPauseSessionService(),
-            new StubResumeSessionService(), service)
+        return new SessionsController(new StubLifecycleService(), create ?? new StubCreateService(), service)
         {
             ControllerContext = new ControllerContext
             {
@@ -67,7 +83,24 @@ public class DoctorSessionQueryEndpointTests
         public Task<DoctorSessionDetails?> GetActiveOrUpcomingAsync(Guid clinicId, Guid doctorId, CancellationToken cancellationToken = default) => Task.FromResult<DoctorSessionDetails?>(null);
     }
 
-    private sealed class StubCreateSessionService : ICreateSessionService { public Task<Guid> CreateAsync(CreateSessionRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException(); }
-    private sealed class StubPauseSessionService : IPauseSessionService { public Task<PauseSessionResult> PauseAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException(); }
-    private sealed class StubResumeSessionService : IResumeSessionService { public Task<ResumeSessionResult> ResumeAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException(); }
+    private sealed class StubLifecycleService : ISessionLifecycleService
+    {
+        public Task<SessionLifecycleResult> StartAsync(Guid id, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<SessionLifecycleResult> PauseAsync(Guid id, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<SessionLifecycleResult> ResumeAsync(Guid id, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<SessionLifecycleResult> CloseAsync(Guid id, CancellationToken token = default) => throw new NotSupportedException();
+    }
+
+    private sealed class StubCreateService : ICreateDoctorSessionService
+    {
+        public Guid ClinicId { get; private set; }
+        public Guid DoctorId { get; private set; }
+        public Task<Guid> CreateAsync(Guid clinicId, Guid doctorId, CreateDoctorSessionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            ClinicId = clinicId;
+            DoctorId = doctorId;
+            return Task.FromResult(Guid.NewGuid());
+        }
+    }
 }

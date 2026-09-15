@@ -1,0 +1,13 @@
+.onboarding { max-width: 42rem; margin: 2rem auto; padding: 1rem; }
+.onboarding form, .administration form, .administration { display: grid; gap: 1rem; }
+.administration fieldset { display: flex; flex-wrap: wrap; gap: 1rem; }
+.check { display: flex; align-items: center; gap: .6rem; min-height: 44px; }
+.check input { width: 20px; height: 20px; }
+.administration .row-actions { flex-wrap: wrap; }
+.onboarding input, .administration input { max-width: 100%; }
+@media (max-width: 600px) { .onboarding { margin: 0; } .administration fieldset { flex-direction: column; } }
+
+.administration, .administration form, .onboarding form { grid-template-columns: minmax(0, 1fr); }
+.administration fieldset, .administration label, .onboarding label { min-inline-size: 0; }
+.administration input, .onboarding input { min-width: 0; }
+.administration { overflow-wrap: anywhere; }

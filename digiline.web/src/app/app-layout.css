@@ -1,10 +1,107 @@
-.app-shell { min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
-.topbar { height: 4.5rem; padding: 0 clamp(1rem, 4vw, 4rem); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); background: rgba(249, 251, 250, .9); backdrop-filter: blur(14px); }
-.brand { display: inline-flex; align-items: center; gap: .65rem; color: var(--color-ink); font: 700 1.15rem var(--font-display); text-decoration: none; }
-.brand-mark { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: .65rem; color: white; background: var(--color-primary); }
-.nav-link { color: var(--color-muted); text-decoration: none; font-weight: 650; padding: .65rem .85rem; border-radius: .6rem; }
-.nav-link:hover, .nav-link.active { color: var(--color-primary-dark); background: var(--color-primary-soft); }
-.topbar-actions, .account { display: flex; align-items: center; gap: 1rem; }.account { padding-left: 1rem; border-left: 1px solid var(--color-border); }.account span { display: grid; line-height: 1.2; }.account small { color: var(--color-muted); font-size: .75rem; }.sign-out { padding: .5rem .7rem; border: 1px solid var(--color-border); border-radius: .55rem; color: var(--color-muted); background: var(--color-surface); cursor: pointer; }.sign-out:hover { color: var(--color-ink); border-color: var(--color-border-strong); }
-.page { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; padding: clamp(2rem, 6vw, 5rem) 0; }
-.footer { padding: 1.5rem; text-align: center; color: var(--color-muted); font-size: .875rem; border-top: 1px solid var(--color-border); }
-@media (max-width: 640px) { .topbar nav, .account span { display: none; }.account { padding-left: 0; border: 0; } }
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+.topbar {
+  min-height: 4.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem clamp(1rem, 4vw, 4rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(249, 251, 250, 0.9);
+  backdrop-filter: blur(14px);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--color-ink);
+  font: 700 1.15rem var(--font-display);
+  text-decoration: none;
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.65rem;
+  color: white;
+  background: var(--color-primary);
+}
+.nav-link {
+  color: var(--color-muted);
+  text-decoration: none;
+  font-weight: 650;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.6rem;
+}
+.nav-link:hover,
+.nav-link.active {
+  color: var(--color-primary-dark);
+  background: var(--color-primary-soft);
+}
+.topbar-actions,
+.account {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.account {
+  padding-left: 1rem;
+  border-left: 1px solid var(--color-border);
+}
+.account span {
+  display: grid;
+  line-height: 1.2;
+}
+.account small {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+.sign-out {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.55rem;
+  color: var(--color-muted);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+.sign-out:hover {
+  color: var(--color-ink);
+  border-color: var(--color-border-strong);
+}
+.page {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: clamp(2rem, 6vw, 5rem) 0;
+}
+.footer {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  border-top: 1px solid var(--color-border);
+}
+@media (max-width: 640px) {
+  .account span {
+    display: none;
+  }
+  .account {
+    padding-left: 0;
+    border: 0;
+  }
+}
+
+.app-shell { grid-template-columns: minmax(0, 1fr); }
+.page, .page > *, .topbar-actions, .account { min-width: 0; }
+.topbar nav { display: flex; flex-wrap: wrap; }
+.nav-link { display: inline-flex; align-items: center; min-height: 44px; }
+.sign-out { min-height: 44px; }
+@media (max-width: 1100px) {
+  .topbar-actions { width: 100%; flex-wrap: wrap; }
+  .account { padding-left: 0; border: 0; flex-wrap: wrap; }
+}

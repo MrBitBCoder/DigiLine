@@ -13,6 +13,7 @@ public class QueueEventPublicationTests
     public async Task CreateWalkIn_PublishesCreatedEventAfterCommit()
     {
         var session = CreateScheduledSession();
+        session.OpenBooking();
         var queueRepository = new StubQueueTokenRepository();
         var transactionManager = new StubTransactionManager();
         var publisher = new RecordingPublisher(() =>
@@ -38,6 +39,7 @@ public class QueueEventPublicationTests
     public async Task BookToken_PublishesBookedEventAfterCommit()
     {
         var session = CreateScheduledSession();
+        session.OpenBooking();
         var patient = new PatientProfile(Guid.NewGuid(), "Booked Patient", 30);
         var queueRepository = new StubQueueTokenRepository();
         var transactions = new StubTransactionManager();
@@ -124,11 +126,10 @@ public class QueueEventPublicationTests
         var repository = new StubSessionRepository(session);
         var publisher = new RecordingPublisher(() => repository.WasSaved);
 
-        await new PauseSessionService(repository, publisher)
-            .PauseAsync(session.Id);
+        var lifecycle = new SessionLifecycleService(repository, publisher);
+        await lifecycle.PauseAsync(session.Id);
         repository.WasSaved = false;
-        await new ResumeSessionService(repository, publisher)
-            .ResumeAsync(session.Id);
+        await lifecycle.ResumeAsync(session.Id);
 
         Assert.Equal(
             new[] { QueueEventType.SessionPaused, QueueEventType.SessionResumed },
@@ -208,6 +209,7 @@ public class QueueEventPublicationTests
         public Task<QueueToken?> GetNextWaitingForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default) => Task.FromResult(_token?.SessionId == sessionId ? _token : null);
         public Task<int?> GetMaximumTokenNumberAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int?> AllocateNextTokenNumberAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<long?> AllocateNextQueueOrderAsync(Guid sessionId, CancellationToken cancellationToken = default) => Task.FromResult<long?>(2);
     }
 
     private sealed class StubTokenNumberService : ITokenNumberService

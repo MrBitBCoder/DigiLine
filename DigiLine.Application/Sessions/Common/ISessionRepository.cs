@@ -20,6 +20,13 @@ namespace DigiLine.Application.Sessions
             Guid sessionId,
             CancellationToken cancellationToken = default);
 
+        Task<Session?> GetForDoctorForUpdateAsync(Guid sessionId, Guid clinicId, Guid doctorId,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        Task<IReadOnlyList<QueueToken>> GetUnfinishedTokensForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        Task DeleteAsync(Session session, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         Task<IReadOnlyList<DoctorSessionRecord>> ListForDoctorAsync(
             Guid clinicId,
             Guid doctorId,

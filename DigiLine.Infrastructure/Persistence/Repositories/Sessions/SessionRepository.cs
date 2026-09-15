@@ -24,6 +24,12 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
             Session session,
             CancellationToken cancellationToken = default)
         {
+            if (_dbContext.Database.CurrentTransaction is not null)
+            {
+                await _dbContext.Clinics.FromSqlInterpolated($"SELECT * FROM Clinics WITH (UPDLOCK, HOLDLOCK) WHERE Id = {session.ClinicId}").SingleAsync(cancellationToken);
+                if (!await _dbContext.Staff.AnyAsync(x => x.Id == session.DoctorId && x.ClinicId == session.ClinicId && x.IsActive && !x.InvitationPending && x.Roles.Any(r => r.Role == DigiLine.Domain.Common.StaffRole.Doctor), cancellationToken))
+                    throw new InvalidOperationException("The doctor account is no longer active.");
+            }
             await _dbContext.Sessions.AddAsync(
                 session,
                 cancellationToken);
@@ -39,10 +45,29 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
             Guid sessionId,
             CancellationToken cancellationToken = default)
         {
-            return await _dbContext.Sessions
-                .FirstOrDefaultAsync(
+            var query = _dbContext.Database.CurrentTransaction is null ? _dbContext.Sessions :
+                _dbContext.Sessions.FromSqlInterpolated($"SELECT * FROM Sessions WITH (UPDLOCK, HOLDLOCK) WHERE Id = {sessionId}");
+            return await query.FirstOrDefaultAsync(
                     x => x.Id == sessionId,
                     cancellationToken);
+        }
+
+        public async Task<Session?> GetForDoctorForUpdateAsync(Guid sessionId, Guid clinicId, Guid doctorId,
+            CancellationToken cancellationToken = default)
+        {
+            var session = await GetByIdAsync(sessionId, cancellationToken);
+            if (session is null || session.ClinicId != clinicId || session.DoctorId != doctorId) return null;
+            await _dbContext.Entry(session).Collection(x => x.QueueTokens).LoadAsync(cancellationToken);
+            return session;
+        }
+
+        public async Task<IReadOnlyList<QueueToken>> GetUnfinishedTokensForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            await _dbContext.QueueTokens.Where(x => x.SessionId == sessionId && x.Status != DigiLine.Domain.Common.QueueTokenStatus.Completed && x.Status != DigiLine.Domain.Common.QueueTokenStatus.Cancelled && x.Status != DigiLine.Domain.Common.QueueTokenStatus.NoShow).ToListAsync(cancellationToken);
+
+        public Task DeleteAsync(Session session, CancellationToken cancellationToken = default)
+        {
+            _dbContext.Sessions.Remove(session);
+            return Task.CompletedTask;
         }
 
         public async Task<IReadOnlyList<DoctorSessionRecord>> ListForDoctorAsync(
@@ -89,7 +114,9 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
                 .Where(session => session.ClinicId == clinicId)
                 .Include(session => session.Clinic)
                 .Include(session => session.Doctor)
-                .Include(session => session.QueueTokens);
+                .Include(session => session.QueueTokens)
+                    .ThenInclude(token => token.PatientProfile)
+                    .ThenInclude(profile => profile!.PhoneAccount);
 
         private static DoctorSessionRecord MapDoctorSession(Session session) =>
             new(
@@ -97,11 +124,13 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
                 session.DoctorId, session.Doctor.Name, session.Name,
                 session.BookingOpenTime, session.StartTime, session.EndTime,
                 session.LastBookingTime, session.AverageConsultationMinutes, session.Status,
-                session.QueueTokens.OrderBy(token => token.TokenNumber)
+                session.QueueTokens.OrderBy(token => token.QueueOrder)
                     .Select(token => new QueueTokenListItem(
                         token.Id, token.TokenNumber, token.PatientProfileId,
-                        token.WalkInName, token.PhoneNumber, token.Status,
-                        token.CreatedAt, token.CalledAt, token.CompletedAt))
-                    .ToList());
+                        token.WalkInName, token.PatientProfile?.PhoneAccount.PhoneNumber ?? token.PhoneNumber, token.Status,
+                        token.CreatedAt, token.CalledAt, token.CompletedAt,
+                        token.PatientProfile?.Name ?? token.WalkInName, token.PatientProfile?.Age ?? token.WalkInAge,
+                        token.LateArrivedAt, token.QueueOrder))
+                    .ToList(), session.Clinic.TimeZoneId);
     }
 }

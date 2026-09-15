@@ -1,4 +1,5 @@
 using DigiLine.Domain.Common;
+using DigiLine.Domain.Entities;
 
 namespace DigiLine.Application.Clinics;
 
@@ -27,6 +28,8 @@ public sealed class GetPublicClinicService : IGetPublicClinicService
         if (clinic is null) return null;
 
         var sessions = clinic.Sessions
+            .Where(session => session.BookingStoppedAt == null && SessionBookingAvailability.IsOpen(session.Status, session.BookingOpenTime,
+                    session.LastBookingTime, session.EndTime, now))
             .OrderBy(session => session.StartTime)
             .Select(session => new PublicSessionSummary(
                 session.Id,
@@ -36,9 +39,8 @@ public sealed class GetPublicClinicService : IGetPublicClinicService
                 session.EndTime,
                 session.LastBookingTime,
                 session.Status,
-                session.Status != SessionStatus.Closed
-                    && now >= session.BookingOpenTime
-                    && now <= session.LastBookingTime,
+                SessionBookingAvailability.IsOpen(session.Status, session.BookingOpenTime,
+                    session.LastBookingTime, session.EndTime, now),
                 session.Queue
                     .Where(token => token.Status is QueueTokenStatus.Called
                         or QueueTokenStatus.InConsultation)
@@ -49,6 +51,6 @@ public sealed class GetPublicClinicService : IGetPublicClinicService
                     QueueTokenStatus.Waiting or QueueTokenStatus.Late)))
             .ToList();
 
-        return new PublicClinicDetails(clinic.Name, clinic.Slug, sessions);
+        return new PublicClinicDetails(clinic.Name, clinic.Slug, sessions, clinic.TimeZoneId);
     }
 }

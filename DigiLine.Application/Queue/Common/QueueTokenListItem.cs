@@ -11,4 +11,8 @@ public sealed record QueueTokenListItem(
     QueueTokenStatus Status,
     DateTime CreatedAt,
     DateTime? CalledAt = null,
-    DateTime? CompletedAt = null);
+    DateTime? CompletedAt = null,
+    string? PatientName = null,
+    int? PatientAge = null,
+    DateTime? LateArrivedAt = null,
+    long QueueOrder = 0, DateTime? FinalizedAt = null);

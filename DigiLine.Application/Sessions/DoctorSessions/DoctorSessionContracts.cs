@@ -16,13 +16,16 @@ public sealed record DoctorSessionRecord(
     DateTime LastBookingTime,
     int AverageConsultationMinutes,
     SessionStatus Status,
-    IReadOnlyList<QueueTokenListItem> Queue);
+    IReadOnlyList<QueueTokenListItem> Queue,
+    string TimeZoneId = "Asia/Kolkata");
 
 public sealed record DoctorQueueSummary(
     QueueTokenListItem? CurrentToken,
     int WaitingCount,
     int LateCount,
-    int TotalCount);
+    int TotalCount,
+    int CompletedCount,
+    int NotAttendedCount, int SkippedCount = 0, int UnfinishedCount = 0);
 
 public sealed record DoctorSessionSummary(
     Guid Id,
@@ -38,8 +41,9 @@ public sealed record DoctorSessionSummary(
     int AverageConsultationMinutes,
     SessionStatus Status,
     bool IsBookingOpen,
-    DoctorQueueSummary QueueSummary);
+    DoctorQueueSummary QueueSummary,
+    string TimeZoneId = "Asia/Kolkata", DateTime? BookingStoppedAt = null, DateTime? CompletedAt = null, bool BookingHasStopped = false);
 
 public sealed record DoctorSessionDetails(
     DoctorSessionSummary Session,
-    IReadOnlyList<QueueTokenListItem> Queue);
+    IReadOnlyList<QueueTokenListItem> Queue, int Page = 1, int PageSize = 10, int TotalCount = 0);

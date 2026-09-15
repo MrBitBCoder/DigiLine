@@ -146,6 +146,9 @@ public class QueueTokenWalkInTests
         token.MarkLate();
 
         Assert.Equal(QueueTokenStatus.Late, token.Status);
+        Assert.NotNull(token.LateArrivedAt);
+        Assert.Equal(DateTimeKind.Utc, token.LateArrivedAt!.Value.Kind);
+        Assert.Throws<InvalidOperationException>(() => token.MarkLate());
     }
 
     [Fact]
@@ -153,7 +156,7 @@ public class QueueTokenWalkInTests
     {
         var token = new QueueToken(Guid.NewGuid(), 1, "Jane Doe", null);
 
-        var exception = Assert.Throws<InvalidOperationException>(token.MarkLate);
+        var exception = Assert.Throws<InvalidOperationException>(() => token.MarkLate());
 
         Assert.Equal("Only a skipped token can be marked late.", exception.Message);
         Assert.Equal(QueueTokenStatus.Waiting, token.Status);
@@ -166,9 +169,11 @@ public class QueueTokenWalkInTests
         token.Call(DateTime.UtcNow.AddMinutes(-10));
         token.Skip();
         token.MarkLate();
+        var arrivedAt = token.LateArrivedAt;
         var calledAgainAt = DateTime.UtcNow;
 
         token.Call(calledAgainAt);
+        Assert.Equal(arrivedAt, token.LateArrivedAt);
 
         Assert.Equal(QueueTokenStatus.Called, token.Status);
         Assert.Equal(calledAgainAt, token.CalledAt);

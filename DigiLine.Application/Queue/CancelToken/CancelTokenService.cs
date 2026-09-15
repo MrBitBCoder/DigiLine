@@ -1,3 +1,4 @@
+using DigiLine.Application.Transactions;
 using DigiLine.Application.Sessions;
 using DigiLine.Domain.Common;
 
@@ -5,6 +6,7 @@ namespace DigiLine.Application.Queue;
 
 public sealed class CancelTokenService : ICancelTokenService
 {
+    private readonly ITransactionManager? _transactionManager;
     private readonly ISessionRepository _sessionRepository;
     private readonly IQueueTokenRepository _queueTokenRepository;
     private readonly IQueueEventPublisher? _queueEventPublisher;
@@ -12,8 +14,9 @@ public sealed class CancelTokenService : ICancelTokenService
     public CancelTokenService(
         ISessionRepository sessionRepository,
         IQueueTokenRepository queueTokenRepository,
-        IQueueEventPublisher? queueEventPublisher = null)
+        IQueueEventPublisher? queueEventPublisher = null, ITransactionManager? transactionManager = null)
     {
+        _transactionManager = transactionManager;
         _sessionRepository = sessionRepository;
         _queueTokenRepository = queueTokenRepository;
         _queueEventPublisher = queueEventPublisher;
@@ -24,6 +27,7 @@ public sealed class CancelTokenService : ICancelTokenService
         Guid tokenId,
         CancellationToken cancellationToken = default)
     {
+        await using var transaction = _transactionManager is null ? null : await _transactionManager.BeginAsync(cancellationToken);
         var session = await _sessionRepository.GetByIdAsync(
             sessionId,
             cancellationToken);
@@ -51,6 +55,7 @@ public sealed class CancelTokenService : ICancelTokenService
 
         token.Cancel();
         await _queueTokenRepository.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
         if (_queueEventPublisher is not null)
         {

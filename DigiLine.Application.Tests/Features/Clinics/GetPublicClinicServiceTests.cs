@@ -35,6 +35,29 @@ public class GetPublicClinicServiceTests
     }
 
     [Fact]
+    public async Task GetAsync_ShowsOnlyBookableStatusesWithinBookingWindow()
+    {
+        PublicSessionRecord Session(SessionStatus status, DateTime bookingOpen, DateTime lastBooking) =>
+            new(Guid.NewGuid(), status.ToString(), bookingOpen, Now.AddHours(-1), Now.AddHours(2),
+                lastBooking, status, []);
+        var repository = new StubRepository(new PublicClinicRecord(Guid.NewGuid(), "Clinic", "clinic",
+        [
+            Session(SessionStatus.Running, Now.AddHours(-1), Now.AddHours(1)),
+            Session(SessionStatus.Scheduled, Now.AddHours(-1), Now.AddHours(1)),
+            Session(SessionStatus.BookingOpen, Now.AddHours(-1), Now.AddHours(1)),
+            Session(SessionStatus.Paused, Now.AddHours(-1), Now.AddHours(1)),
+            Session(SessionStatus.Running, Now.AddMinutes(1), Now.AddHours(1)),
+            Session(SessionStatus.Running, Now.AddHours(-1), Now)
+        ]));
+
+        var result = await new GetPublicClinicService(repository, new TestClock(Now)).GetAsync("clinic");
+
+        Assert.NotNull(result);
+        Assert.Equal(new[] { SessionStatus.Running, SessionStatus.BookingOpen, SessionStatus.Paused },
+            result.Sessions.Select(session => session.Status));
+    }
+
+    [Fact]
     public async Task GetAsync_WhenSlugDoesNotExist_ReturnsNull()
     {
         var result = await new GetPublicClinicService(

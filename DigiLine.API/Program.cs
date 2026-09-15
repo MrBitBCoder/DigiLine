@@ -10,6 +10,10 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using DigiLine.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +41,17 @@ builder.Services
         };
         options.Events = new JwtBearerEvents
         {
+            OnTokenValidated = async context =>
+            {
+                var subject = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Principal?.FindFirstValue("sub");
+                var version = context.Principal?.FindFirstValue("password_version");
+                if (!Guid.TryParse(subject, out var staffId) || !Guid.TryParse(version, out var passwordVersion))
+                { context.Fail("Invalid staff session."); return; }
+                var db = context.HttpContext.RequestServices.GetRequiredService<DigiLineDbContext>();
+                if (!await db.Staff.AnyAsync(staff => staff.Id == staffId && staff.IsActive && !staff.InvitationPending && staff.PasswordVersion == passwordVersion,
+                        context.HttpContext.RequestAborted))
+                    context.Fail("Staff session has been revoked.");
+            },
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
@@ -51,6 +66,13 @@ builder.Services
     });
 
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("password-reset", context =>
+        RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ =>
+            new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(10), QueueLimit = 0 }));
+});
 
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
@@ -64,6 +86,7 @@ builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<StaffSubscriptions>();
 builder.Services.AddSingleton<IQueueEventPublisher, SignalRQueueEventPublisher>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -97,19 +120,16 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 
-builder.Services.AddScoped<ICreateSessionService, CreateSessionService>();
-builder.Services.AddScoped<IPauseSessionService, PauseSessionService>();
-builder.Services.AddScoped<IResumeSessionService, ResumeSessionService>();
+builder.Services.AddScoped<ISessionLifecycleService, SessionLifecycleService>();
+builder.Services.AddScoped<ICreateDoctorSessionService, CreateDoctorSessionService>();
+builder.Services.AddScoped<IManageDoctorSessionService, ManageDoctorSessionService>();
 builder.Services.AddScoped<IGetDoctorSessionsService, GetDoctorSessionsService>();
 builder.Services.AddScoped<IGetReceptionDashboardService, GetReceptionDashboardService>();
-builder.Services.AddScoped<IStartSessionService, StartSessionService>();
-builder.Services.AddScoped<ICloseSessionService, CloseSessionService>();
 builder.Services.AddScoped<IGetPublicClinicService, GetPublicClinicService>();
 builder.Services.AddScoped<IPublicPatientService, PublicPatientService>();
 builder.Services.AddScoped<IPublicQueueService, PublicQueueService>();
 builder.Services.AddScoped<IBookTokenService, BookTokenService>();
 builder.Services.AddScoped<ICreateWalkInTokenService, CreateWalkInTokenService>();
-builder.Services.AddScoped<IGetOrderedQueueService, GetOrderedQueueService>();
 builder.Services.AddScoped<ICallNextTokenService, CallNextTokenService>();
 builder.Services.AddScoped<IRecallTokenService, RecallTokenService>();
 builder.Services.AddScoped<ISkipTokenService, SkipTokenService>();
@@ -126,6 +146,20 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext =
+        scope.ServiceProvider.GetRequiredService<DigiLineDbContext>();
+
+    await dbContext.Database.MigrateAsync();
+    var defaultZone = builder.Configuration["ClinicTime:DefaultTimeZoneId"] ?? "Asia/Kolkata";
+    _ = TimeZoneInfo.FindSystemTimeZoneById(defaultZone);
+    await dbContext.Clinics.Where(clinic => clinic.TimeZoneId == "")
+        .ExecuteUpdateAsync(setters => setters.SetProperty(clinic => clinic.TimeZoneId, defaultZone));
+}
+
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -140,6 +174,8 @@ app.UseExceptionHandler();
 
 
 app.UseHttpsRedirection();
+app.UseRouting();
+app.UseRateLimiter();
 
 app.UseCors("Frontend");
 
@@ -148,7 +184,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<QueueHub>("/hubs/queue");
+app.MapHub<QueueHub>("/hubs/queue", options => options.CloseOnAuthenticationExpiration = true);
 app.MapHub<PublicQueueHub>("/hubs/public-queue");
 
 app.Run();

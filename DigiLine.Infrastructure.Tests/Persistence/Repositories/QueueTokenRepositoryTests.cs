@@ -8,7 +8,7 @@ namespace DigiLine.Infrastructure.Tests
 
     public class QueueTokenRepositoryTests
     {
-     
+
         private static DigiLineDbContext CreateDbContext()
         {
             var configuration = new ConfigurationBuilder()
@@ -17,7 +17,7 @@ namespace DigiLine.Infrastructure.Tests
                 .Build();
 
             var connectionString =
-                configuration.GetConnectionString("DigiLine");
+                Environment.GetEnvironmentVariable("DIGILINE_TEST_CONNECTION") ?? configuration.GetConnectionString("DigiLine");
 
             if (string.IsNullOrWhiteSpace(connectionString))
             {

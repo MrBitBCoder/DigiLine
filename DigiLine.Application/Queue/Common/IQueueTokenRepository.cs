@@ -22,6 +22,12 @@ namespace DigiLine.Application.Queue
             Guid tokenId,
             CancellationToken cancellationToken = default);
 
+        Task<QueueToken?> GetByIdForUpdateAsync(
+            Guid sessionId,
+            Guid tokenId,
+            CancellationToken cancellationToken = default) =>
+            GetByIdAsync(sessionId, tokenId, cancellationToken);
+
         Task<QueueToken?> GetActiveByPatientAsync(
             Guid sessionId,
             Guid patientProfileId,
@@ -35,6 +41,11 @@ namespace DigiLine.Application.Queue
         Task<int?> AllocateNextTokenNumberAsync(
             Guid sessionId,
             CancellationToken cancellationToken = default);
+
+        Task<long?> AllocateNextQueueOrderAsync(
+            Guid sessionId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         Task AddAsync(
             QueueToken queueToken,

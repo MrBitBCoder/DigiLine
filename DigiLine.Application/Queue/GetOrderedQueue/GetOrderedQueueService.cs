@@ -33,7 +33,7 @@ public sealed class GetOrderedQueueService : IGetOrderedQueueService
             cancellationToken);
 
         return tokens
-            .OrderBy(token => token.TokenNumber)
+            .OrderBy(token => token.QueueOrder)
             .Select(token => new QueueTokenListItem(
                 token.Id,
                 token.TokenNumber,
@@ -43,7 +43,8 @@ public sealed class GetOrderedQueueService : IGetOrderedQueueService
                 token.Status,
                 token.CreatedAt,
                 token.CalledAt,
-                token.CompletedAt))
+                token.CompletedAt,
+                QueueOrder: token.QueueOrder))
             .ToList();
     }
 }

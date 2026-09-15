@@ -57,14 +57,11 @@ public sealed class GetQueuePositionService : IGetQueuePositionService
             sessionId,
             cancellationToken);
 
-        var patientsAhead = token.Status == QueueTokenStatus.Waiting
-            ? tokens.Count(candidate =>
-                candidate.Status == QueueTokenStatus.Waiting
-                && candidate.TokenNumber < token.TokenNumber)
-            : tokens.Count(candidate =>
-                candidate.Status == QueueTokenStatus.Waiting
-                || (candidate.Status == QueueTokenStatus.Late
-                    && candidate.TokenNumber < token.TokenNumber));
+        var patientsAhead = tokens.Count(candidate =>
+            candidate.Status is QueueTokenStatus.Waiting or QueueTokenStatus.Late
+            && (candidate.QueueOrder < token.QueueOrder
+                || (candidate.QueueOrder == token.QueueOrder
+                    && candidate.TokenNumber < token.TokenNumber)));
 
         return new QueuePositionResult(
             token.Id,

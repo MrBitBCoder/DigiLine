@@ -31,6 +31,7 @@ namespace DigiLine.Infrastructure.Persistence.Configurations
                 .IsRequired();
 
             builder.HasIndex(x => x.SessionId);
+            builder.HasIndex(x => new { x.SessionId, x.QueueOrder }).IsUnique();
 
             builder.HasIndex(x => new
             {

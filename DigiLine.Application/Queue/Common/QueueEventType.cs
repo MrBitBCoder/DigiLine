@@ -11,5 +11,8 @@ public enum QueueEventType
     TokenMarkedLate = 7,
     SessionPaused = 8,
     SessionResumed = 9,
-    WalkInCreated = 10
+    WalkInCreated = 10,
+    BookingStopped = 11,
+    SessionCompleted = 12,
+    SessionStarted = 13
 }

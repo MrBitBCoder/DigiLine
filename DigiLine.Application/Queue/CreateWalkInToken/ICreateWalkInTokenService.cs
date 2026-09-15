@@ -12,6 +12,7 @@ namespace DigiLine.Application.Queue
             Guid sessionId,
             string walkInName,
             string? phoneNumber,
-            CancellationToken cancellationToken = default);
+            CancellationToken cancellationToken = default,
+            int? age = null);
     }
 }

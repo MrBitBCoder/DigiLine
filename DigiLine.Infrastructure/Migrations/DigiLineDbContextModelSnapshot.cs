@@ -22,6 +22,36 @@ namespace DigiLine.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("DigiLine.Domain.Entities.AdministrationAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("StaffId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClinicId", "OccurredAt");
+
+                    b.ToTable("AdministrationAudits");
+                });
+
             modelBuilder.Entity("DigiLine.Domain.Entities.Clinic", b =>
                 {
                     b.Property<Guid>("Id")
@@ -41,6 +71,11 @@ namespace DigiLine.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -50,6 +85,40 @@ namespace DigiLine.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Clinics");
+                });
+
+            modelBuilder.Entity("DigiLine.Domain.Entities.PasswordResetToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("StaffId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("StaffId", "CreatedAt");
+
+                    b.ToTable("PasswordResetTokens");
                 });
 
             modelBuilder.Entity("DigiLine.Domain.Entities.PatientProfile", b =>
@@ -122,12 +191,21 @@ namespace DigiLine.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LateArrivedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<Guid?>("PatientProfileId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("PhoneNumber")
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<long>("QueueOrder")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid>("SessionId")
                         .HasColumnType("uniqueidentifier");
@@ -141,6 +219,9 @@ namespace DigiLine.Infrastructure.Migrations
                     b.Property<int>("TokenNumber")
                         .HasColumnType("int");
 
+                    b.Property<int?>("WalkInAge")
+                        .HasColumnType("int");
+
                     b.Property<string>("WalkInName")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
@@ -151,8 +232,13 @@ namespace DigiLine.Infrastructure.Migrations
 
                     b.HasIndex("SessionId");
 
+                    b.HasIndex("SessionId", "QueueOrder")
+                        .IsUnique();
+
                     b.HasIndex("SessionId", "TokenNumber")
                         .IsUnique();
+
+                    b.HasIndex("SessionId", "Status", "QueueOrder", "TokenNumber");
 
                     b.ToTable("QueueTokens");
                 });
@@ -169,8 +255,14 @@ namespace DigiLine.Infrastructure.Migrations
                     b.Property<DateTime>("BookingOpenTime")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("BookingStoppedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -189,6 +281,9 @@ namespace DigiLine.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<long>("NextQueueOrder")
+                        .HasColumnType("bigint");
+
                     b.Property<int>("NextTokenNumber")
                         .HasColumnType("int");
 
@@ -206,6 +301,10 @@ namespace DigiLine.Infrastructure.Migrations
                     b.HasIndex("ClinicId");
 
                     b.HasIndex("DoctorId");
+
+                    b.HasIndex("ClinicId", "StartTime", "Id");
+
+                    b.HasIndex("ClinicId", "DoctorId", "StartTime", "Id");
 
                     b.ToTable("Sessions");
                 });
@@ -227,15 +326,32 @@ namespace DigiLine.Infrastructure.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("nvarchar(320)");
 
+                    b.Property<bool>("InvitationPending")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("NormalizedEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("PasswordVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("Role")
                         .HasColumnType("int");
@@ -245,10 +361,69 @@ namespace DigiLine.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("NormalizedEmail")
+                        .IsUnique();
+
                     b.HasIndex("ClinicId", "Email")
                         .IsUnique();
 
                     b.ToTable("Staff");
+                });
+
+            modelBuilder.Entity("DigiLine.Domain.Entities.StaffInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("DeliveryFailed")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("StaffId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StaffId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("StaffInvitations");
+                });
+
+            modelBuilder.Entity("DigiLine.Domain.Entities.StaffRoleAssignment", b =>
+                {
+                    b.Property<Guid>("StaffId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.HasKey("StaffId", "Role");
+
+                    b.ToTable("StaffRoleAssignment");
+                });
+
+            modelBuilder.Entity("DigiLine.Domain.Entities.PasswordResetToken", b =>
+                {
+                    b.HasOne("DigiLine.Domain.Entities.Staff", null)
+                        .WithMany()
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("DigiLine.Domain.Entities.PatientProfile", b =>
@@ -310,9 +485,32 @@ namespace DigiLine.Infrastructure.Migrations
                     b.Navigation("Clinic");
                 });
 
+            modelBuilder.Entity("DigiLine.Domain.Entities.StaffInvitation", b =>
+                {
+                    b.HasOne("DigiLine.Domain.Entities.Staff", null)
+                        .WithMany()
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DigiLine.Domain.Entities.StaffRoleAssignment", b =>
+                {
+                    b.HasOne("DigiLine.Domain.Entities.Staff", null)
+                        .WithMany("Roles")
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DigiLine.Domain.Entities.Session", b =>
                 {
                     b.Navigation("QueueTokens");
+                });
+
+            modelBuilder.Entity("DigiLine.Domain.Entities.Staff", b =>
+                {
+                    b.Navigation("Roles");
                 });
 #pragma warning restore 612, 618
         }

@@ -37,12 +37,12 @@ namespace DigiLine.Infrastructure.Authentication
             CancellationToken cancellationToken = default)
         {
             var staff = await _dbContext.Staff
-                .AsNoTracking()
+                .AsNoTracking().Include(x => x.Roles)
                 .SingleOrDefaultAsync(
-                    x => x.Email == email,
+                    x => x.NormalizedEmail == email.Trim().ToUpperInvariant(),
                     cancellationToken);
 
-            if (staff is null)
+            if (staff is null || !staff.IsActive || staff.InvitationPending)
             {
                 return null;
             }
@@ -52,14 +52,16 @@ namespace DigiLine.Infrastructure.Authentication
                 return null;
             }
 
-            var claims = new[]
+            var claims = new List<Claim>
             {
             new Claim(JwtRegisteredClaimNames.Sub, staff.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, staff.Email),
             new Claim(JwtRegisteredClaimNames.Name, staff.Name),
-            new Claim("role", staff.Role.ToString()),
-            new Claim("clinic_id", staff.ClinicId.ToString())
+
+            new Claim("clinic_id", staff.ClinicId.ToString()),
+            new Claim("password_version", staff.PasswordVersion.ToString())
         };
+            claims.AddRange(staff.Roles.Select(role => new Claim("role", role.Role.ToString())));
 
             var key = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));

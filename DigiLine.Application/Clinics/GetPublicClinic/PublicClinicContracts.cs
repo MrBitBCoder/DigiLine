@@ -16,13 +16,14 @@ public sealed record PublicSessionRecord(
     DateTime EndTime,
     DateTime LastBookingTime,
     SessionStatus Status,
-    IReadOnlyList<PublicQueueTokenRecord> Queue);
+    IReadOnlyList<PublicQueueTokenRecord> Queue, DateTime? BookingStoppedAt = null);
 
 public sealed record PublicClinicRecord(
     Guid Id,
     string Name,
     string Slug,
-    IReadOnlyList<PublicSessionRecord> Sessions);
+    IReadOnlyList<PublicSessionRecord> Sessions,
+    string TimeZoneId = "Asia/Kolkata");
 
 public sealed record PublicSessionSummary(
     Guid Id,
@@ -39,4 +40,5 @@ public sealed record PublicSessionSummary(
 public sealed record PublicClinicDetails(
     string Name,
     string Slug,
-    IReadOnlyList<PublicSessionSummary> Sessions);
+    IReadOnlyList<PublicSessionSummary> Sessions,
+    string TimeZoneId = "Asia/Kolkata");

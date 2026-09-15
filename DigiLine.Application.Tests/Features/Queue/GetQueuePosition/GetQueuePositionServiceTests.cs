@@ -8,7 +8,7 @@ namespace DigiLine.Application.Tests;
 public class GetQueuePositionServiceTests
 {
     [Fact]
-    public async Task GetAsync_ForWaitingToken_CountsOnlyEarlierWaitingTokens()
+    public async Task GetAsync_ForWaitingToken_CountsEarlierCallableTokens()
     {
         var session = CreateSession();
         var first = new QueueToken(session.Id, 1, "First", null);
@@ -17,6 +17,7 @@ public class GetQueuePositionServiceTests
         completed.Complete(DateTime.UtcNow);
         var target = new QueueToken(session.Id, 3, "Target", null);
         var late = CreateLateToken(session.Id, 0);
+        late.AssignQueueOrder(4);
         var repository = new StubQueueTokenRepository(
             late, target, completed, first);
         var service = CreateService(session, repository);
@@ -29,7 +30,7 @@ public class GetQueuePositionServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_ForLateToken_CountsAllWaitingAndEarlierLateTokens()
+    public async Task GetAsync_ForLateToken_UsesQueueOrderAcrossStatuses()
     {
         var session = CreateSession();
         var waitingOne = new QueueToken(session.Id, 4, "Waiting 1", null);
@@ -37,6 +38,11 @@ public class GetQueuePositionServiceTests
         var earlierLate = CreateLateToken(session.Id, 1);
         var target = CreateLateToken(session.Id, 3);
         var laterLate = CreateLateToken(session.Id, 6);
+        earlierLate.AssignQueueOrder(3);
+        waitingOne.AssignQueueOrder(1);
+        waitingTwo.AssignQueueOrder(2);
+        target.AssignQueueOrder(4);
+        laterLate.AssignQueueOrder(5);
         var repository = new StubQueueTokenRepository(
             target, waitingTwo, laterLate, earlierLate, waitingOne);
         var service = CreateService(session, repository);
@@ -85,7 +91,7 @@ public class GetQueuePositionServiceTests
         var session = CreateSession();
         session.OpenBooking();
         session.Start();
-        session.Close();
+        session.StopBooking(DateTime.UtcNow); session.CompleteSession(DateTime.UtcNow);
         var repository = new StubQueueTokenRepository();
         var service = CreateService(session, repository);
 

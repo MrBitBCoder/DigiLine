@@ -37,29 +37,30 @@ namespace DigiLine.API.Development
             {
                 clinic = new Clinic(
                     "Development Clinic",
-                    clinicSlug);
+                    clinicSlug,
+                    scope.ServiceProvider.GetRequiredService<IConfiguration>()["ClinicTime:DefaultTimeZoneId"] ?? "Asia/Kolkata");
 
                 dbContext.Clinics.Add(clinic);
                 await dbContext.SaveChangesAsync();
             }
 
-            var staffExists = await dbContext.Staff
-                .AnyAsync(x =>
+            var doctor = await dbContext.Staff
+                .FirstOrDefaultAsync(x =>
                     x.ClinicId == clinic.Id &&
                     x.Email == email);
 
-            if (!staffExists)
+            if (doctor is null)
             {
                 var passwordHash = passwordHasher.Hash(password);
 
-                var staff = new Staff(
+                doctor = new Staff(
                     clinic.Id,
                     "Development Doctor",
                     email,
                     passwordHash,
                     StaffRole.Doctor);
 
-                dbContext.Staff.Add(staff);
+                dbContext.Staff.Add(doctor);
 
                 await dbContext.SaveChangesAsync();
             }
@@ -73,9 +74,47 @@ namespace DigiLine.API.Development
                 await dbContext.SaveChangesAsync();
             }
 
-            var phoneAccount = await dbContext.PhoneAccounts.FirstOrDefaultAsync(x => x.PhoneNumber == phoneNumber); if (phoneAccount is null) { phoneAccount = new PhoneAccount(phoneNumber); dbContext.PhoneAccounts.Add(phoneAccount); await dbContext.SaveChangesAsync(); }
-            var patientProfileExists = await dbContext.PatientProfiles.AnyAsync(x => x.PhoneAccountId == phoneAccount.Id && x.Name == patientName); if (!patientProfileExists) { var patientProfile = new PatientProfile(phoneAccount.Id, patientName, patientAge); dbContext.PatientProfiles.Add(patientProfile); await dbContext.SaveChangesAsync(); }
+            var phoneAccount = await dbContext.PhoneAccounts
+                .FirstOrDefaultAsync(x => x.PhoneNumber == phoneNumber);
+            if (phoneAccount is null)
+            {
+                phoneAccount = new PhoneAccount(phoneNumber);
+                dbContext.PhoneAccounts.Add(phoneAccount);
+                await dbContext.SaveChangesAsync();
+            }
 
+            var patientProfileExists = await dbContext.PatientProfiles.AnyAsync(x =>
+                x.PhoneAccountId == phoneAccount.Id && x.Name == patientName);
+            if (!patientProfileExists)
+            {
+                dbContext.PatientProfiles.Add(new PatientProfile(
+                    phoneAccount.Id, patientName, patientAge));
+                await dbContext.SaveChangesAsync();
+            }
+
+            var today = DateTime.UtcNow.Date;
+            var sessionExists = await dbContext.Sessions.AnyAsync(x =>
+                x.ClinicId == clinic.Id &&
+                x.DoctorId == doctor.Id &&
+                x.StartTime >= today &&
+                x.StartTime < today.AddDays(1));
+
+            if (!sessionExists)
+            {
+                var session = new Session(
+                    clinic.Id,
+                    doctor.Id,
+                    "Development Clinic Session",
+                    today,
+                    today.AddHours(1),
+                    today.AddDays(1).AddTicks(-1),
+                    today.AddDays(1).AddTicks(-1),
+                    10);
+
+                session.OpenBooking();
+                dbContext.Sessions.Add(session);
+                await dbContext.SaveChangesAsync();
+            }
         }
     }
 }

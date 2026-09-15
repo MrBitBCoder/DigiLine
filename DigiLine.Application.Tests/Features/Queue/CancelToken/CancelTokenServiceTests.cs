@@ -39,7 +39,7 @@ public class CancelTokenServiceTests
     public async Task CancelAsync_WhenSessionIsClosed_RejectsCancellation()
     {
         var session = CreateRunningSession();
-        session.Close();
+        session.StopBooking(DateTime.UtcNow); session.CompleteSession(DateTime.UtcNow);
         var repository = new StubQueueTokenRepository();
         var service = CreateService(session, repository);
 

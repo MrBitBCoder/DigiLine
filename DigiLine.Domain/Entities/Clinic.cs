@@ -14,6 +14,8 @@ namespace DigiLine.Domain.Entities
 
         public string Slug { get; private set; } = string.Empty;
 
+        public string TimeZoneId { get; private set; } = "Asia/Kolkata";
+
         public DateTime CreatedAt { get; private set; }
 
         public DateTime UpdatedAt { get; private set; }
@@ -22,12 +24,27 @@ namespace DigiLine.Domain.Entities
         {
         }
 
-        public Clinic(string name, string slug)
+        public Clinic(string name, string slug, string timeZoneId = "Asia/Kolkata")
         {
             Id = Guid.NewGuid();
             Name = name;
             Slug = slug;
+            SetTimeZone(timeZoneId);
             CreatedAt = DateTime.UtcNow;
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        public void SetTimeZone(string timeZoneId)
+        {
+            if (string.IsNullOrWhiteSpace(timeZoneId))
+                throw new ArgumentException("A clinic time zone is required.", nameof(timeZoneId));
+            _ = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            TimeZoneId = timeZoneId;
+        }
+
+        public void Rename(string name)
+        {
+            Name = name.Trim();
             UpdatedAt = DateTime.UtcNow;
         }
     }

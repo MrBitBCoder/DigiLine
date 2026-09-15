@@ -1,68 +1,36 @@
 # DigiLine architecture
 
-DigiLine uses Clean Architecture with feature-oriented folders inside each layer.
-
-## Dependency direction
+DigiLine keeps four backend projects so an interviewer can see clear dependency boundaries without production-oriented ceremony.
 
 ```text
-DigiLine.API ───────► DigiLine.Application ───────► DigiLine.Domain
-      │                         ▲
-      └────► DigiLine.Infrastructure ──────────────┘
+API ─────► Application ─────► Domain
+ │              ▲
+ └────► Infrastructure ─────┘
 ```
 
-- `DigiLine.Domain` contains entities, value rules, and domain enums. It has no dependency on the other projects.
-- `DigiLine.Application` contains use cases, result/request models, and interfaces required by those use cases. It depends only on Domain.
-- `DigiLine.Infrastructure` implements Application interfaces for persistence, authentication, and tenancy. Database migrations remain here.
-- `DigiLine.API` is the composition and HTTP delivery layer. Controllers and their HTTP-only request models are grouped by feature.
-- Each `*.Tests` project mirrors the area of the production project that it verifies.
+- **Domain** owns clinic, session, patient, and queue-token state rules.
+- **Application** implements public booking, reception, doctor queue, and session lifecycle workflows.
+- **Infrastructure** implements persistence, authentication, patient access, and transactions.
+- **API** provides HTTP endpoints, development seed data, and SignalR publishing.
+- **Web** contains clinic administration, staff and patient experiences plus authentication and shared UI/realtime code.
 
-## Folder conventions
+## API surface
 
-```text
-DigiLine.API/
-  Features/<Feature>/       controllers and HTTP contracts
-  Middleware/               cross-cutting HTTP behavior
-  Realtime/<Feature>/       SignalR hubs and event publishers
-  Development/              development-only setup
+- `/api/public/*`: clinic details, simulated phone verification, profiles, booking, and token status.
+- `/api/reception/*`: today’s sessions, walk-ins, recall, cancel, and late handling.
+- `/api/doctor/*`: doctor-scoped session queries, lifecycle transitions, and queue operations.
+- `/api/auth/*`: login, registration, invitation acceptance, and password recovery.
+- `/api/admin/*`: tenant-scoped clinic details, paginated staff management, invitations, and access changes.
+- `/hubs/queue` and `/hubs/public-queue`: staff and patient live updates.
 
-DigiLine.Application/
-  <Feature>/<UseCase>/       service, interface, and result models for one use case
-  <Feature>/Common/          ports and models shared within that feature
-  Common/                    genuinely shared application concerns
-  Transactions/             transaction boundary abstraction
+Controllers derive clinic and staff scope from JWT claims. Doctor operations verify ownership before changing data. Application services enforce state transitions; repositories remain persistence-focused.
 
-DigiLine.Domain/
-  Entities/                  domain entities and their behavior
-  Common/                    shared domain types
+## Deliberate boundaries
 
-DigiLine.Infrastructure/
-  Authentication/           authentication and password services
-  Tenancy/                  current-clinic resolution
-  Patients/                  non-persistence patient adapters
-  Persistence/
-    Configurations/          EF Core entity configurations
-    Repositories/<Feature>/ feature-specific repository adapters
-    Transactions/           EF Core transaction implementation
-  Migrations/               EF Core migration history
+Registration atomically creates an active clinic and its first administrator. Staff-role associations support multiple roles, while globally unique staff emails retain one clinic per account. Invitations use hashed, expiring single-use tokens and SMTP. Account/role changes revoke staff credentials, including realtime delivery eligibility.
 
-digiline.web/src/
-  app/                       routing and application layout
-  api/                       shared HTTP transport
-  auth/                      session state and route protection
-  features/<Feature>/        pages, feature API functions, styles, and tests
-  realtime/                  shared SignalR hooks
-  shared/                    reusable types, UI, and design tokens
-  test/                      test runtime setup
-```
+Session, booking, and queue mutations acquire the session lock first inside SQL transactions. BookingStoppedAt is independent of lifecycle state. Completion checks blocking counts and atomically finalizes confirmed Skipped tokens to NoShow; historical Closed sessions are preserved. Events are published after commit and transaction disposal.
 
-## Placement rules
+Staff list/session/queue queries use bounded server-side pages (default 10, maximum 100), tenant filters, deterministic ordering, and independent summary counts. Current-token lookup is scoped to the selected sessions. Clients discard stale responses and coalesce realtime refreshes.
 
-1. Put business rules on Domain entities when the rule belongs to the entity.
-2. Put workflow orchestration in an Application feature service.
-3. Define external dependencies as Application interfaces and implement them in Infrastructure.
-4. Keep controllers thin: validate HTTP input, call one Application use case, and translate the result.
-5. Do not reference Infrastructure or API from Application or Domain.
-6. Add tests under the matching feature or technical area instead of at a test project's root.
-7. When a feature grows beyond a few files, group it by use case rather than by generic `Services`, `Interfaces`, or `Models` folders.
-8. Keep frontend code local to its feature until at least two features genuinely share it.
-9. Keep generated output (`bin`, `obj`, `dist`) and local IDE settings out of architectural folders.
+Patient phone verification remains simulated; deployment is outside this change. See [operations](docs/operations.md) and [verification](docs/verification.md).

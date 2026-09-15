@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DigiLine.API.Features.Queue
 {
-    [ApiController]
+    [NonController] // Legacy unscoped endpoints are retired; use public/doctor/reception routes.
     [Route("api/[controller]")]
     public class QueueController : ControllerBase
     {
@@ -70,7 +70,8 @@ namespace DigiLine.API.Features.Queue
                 request.SessionId,
                 request.WalkInName,
                 request.PhoneNumber,
-                cancellationToken);
+                cancellationToken,
+                request.Age);
 
             return Ok(new
             {

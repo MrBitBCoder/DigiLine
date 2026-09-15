@@ -31,6 +31,23 @@ public class GetDoctorSessionsServiceTests
     }
 
     [Fact]
+    public async Task ListAsync_CountsOnlyCompletedAndFinalNotAttendedTokens()
+    {
+        var clinicId = Guid.NewGuid(); var doctorId = Guid.NewGuid();
+        var record = Session(Guid.NewGuid(), clinicId, doctorId, SessionStatus.Running,
+            Token(1, QueueTokenStatus.Completed), Token(2, QueueTokenStatus.NoShow),
+            Token(3, QueueTokenStatus.Skipped), Token(4, QueueTokenStatus.Waiting),
+            Token(5, QueueTokenStatus.Late), Token(6, QueueTokenStatus.InConsultation));
+        var service = new GetDoctorSessionsService(new StubRepository(record), new TestClock(Now));
+
+        var result = Assert.Single(await service.ListAsync(clinicId, doctorId));
+
+        Assert.Equal(6, result.QueueSummary.TotalCount);
+        Assert.Equal(1, result.QueueSummary.CompletedCount);
+        Assert.Equal(2, result.QueueSummary.NotAttendedCount);
+    }
+
+    [Fact]
     public async Task GetActiveOrUpcomingAsync_PrefersPausedOrRunningSession()
     {
         var clinicId = Guid.NewGuid(); var doctorId = Guid.NewGuid();

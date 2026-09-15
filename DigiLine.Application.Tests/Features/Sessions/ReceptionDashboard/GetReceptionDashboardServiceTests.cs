@@ -1,4 +1,5 @@
 using DigiLine.Application.Queue;
+using DigiLine.Application.Clinics;
 using DigiLine.Application.Sessions;
 using DigiLine.Domain.Common;
 using DigiLine.Domain.Entities;
@@ -10,7 +11,28 @@ public class GetReceptionDashboardServiceTests
     private static readonly DateTime Now = new(2026, 8, 19, 8, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public async Task GetTodayAsync_UsesClinicAndUtcDayAndBuildsQueueSummaries()
+    public async Task GetTodayAsync_UsesClinicSpecificTimeZone()
+    {
+        var clinic = Guid.NewGuid();
+        var repository = new StubRepository(Record(clinic));
+        var service = new GetReceptionDashboardService(repository,
+            new TestClock(new DateTime(2026, 8, 19, 1, 0, 0, DateTimeKind.Utc)),
+            new StubTimeZones("America/New_York"));
+
+        var result = await service.GetTodayAsync(clinic);
+
+        Assert.Equal(new DateTime(2026, 8, 18), result.Date);
+        Assert.Equal(new DateTime(2026, 8, 18, 4, 0, 0, DateTimeKind.Utc), repository.Range.Item2);
+        Assert.Equal(new DateTime(2026, 8, 19, 4, 0, 0, DateTimeKind.Utc), repository.Range.Item3);
+    }
+
+    private sealed class StubTimeZones(string zoneId) : IClinicTimeZoneResolver
+    {
+        public Task<string> GetTimeZoneIdAsync(Guid clinicId, CancellationToken cancellationToken = default) => Task.FromResult(zoneId);
+    }
+
+    [Fact]
+    public async Task GetTodayAsync_UsesClinicLocalDayAndBuildsQueueSummaries()
     {
         var clinic = Guid.NewGuid(); var session = Record(clinic);
         var repository = new StubRepository(session);
@@ -21,7 +43,10 @@ public class GetReceptionDashboardServiceTests
         Assert.Equal("Clinic", result.ClinicName);
         Assert.Single(result.Sessions);
         Assert.Equal(1, result.Sessions[0].Session.QueueSummary.WaitingCount);
-        Assert.Equal((clinic, Now.Date, Now.Date.AddDays(1)), repository.Range);
+        Assert.Equal("Asia/Kolkata", result.TimeZoneId);
+        Assert.Equal(new DateTime(2026, 8, 19), result.Date);
+        Assert.Equal((clinic, new DateTime(2026, 8, 18, 18, 30, 0, DateTimeKind.Utc),
+            new DateTime(2026, 8, 19, 18, 30, 0, DateTimeKind.Utc)), repository.Range);
     }
 
     [Fact]

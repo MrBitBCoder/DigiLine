@@ -12,5 +12,9 @@ namespace DigiLine.API.Features.Queue
 
         [StringLength(20)]
         public string? PhoneNumber { get; set; }
+
+        [Required]
+        [Range(0, 130)]
+        public int? Age { get; set; }
     }
 }

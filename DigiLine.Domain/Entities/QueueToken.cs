@@ -19,6 +19,7 @@ namespace DigiLine.Domain.Entities
 
             SessionId = sessionId;
             TokenNumber = tokenNumber;
+            QueueOrder = tokenNumber;
             PatientProfileId = patientProfileId;
 
             Status = QueueTokenStatus.Waiting;
@@ -30,8 +31,11 @@ namespace DigiLine.Domain.Entities
             Guid sessionId,
             int tokenNumber,
             string walkInName,
-            string? phoneNumber)
+            string? phoneNumber,
+            int? walkInAge = null)
         {
+            if (walkInAge is < 0 or > 130)
+                throw new InvalidOperationException("Walk-in age must be between 0 and 130.");
             if (string.IsNullOrWhiteSpace(walkInName))
                 throw new InvalidOperationException(
                     "Walk-in name is required.");
@@ -54,11 +58,13 @@ namespace DigiLine.Domain.Entities
 
             SessionId = sessionId;
             TokenNumber = tokenNumber;
+            QueueOrder = tokenNumber;
 
             PatientProfileId = null;
 
             WalkInName = normalizedWalkInName;
             PhoneNumber = normalizedPhoneNumber;
+            WalkInAge = walkInAge;
 
             Status = QueueTokenStatus.Waiting;
 
@@ -71,18 +77,28 @@ namespace DigiLine.Domain.Entities
         public Session Session { get; private set; } = null!;
 
         public int TokenNumber { get; private set; }
+        public long QueueOrder { get; private set; }
+
+        public void AssignQueueOrder(long queueOrder)
+        {
+            if (queueOrder <= 0) throw new ArgumentOutOfRangeException(nameof(queueOrder));
+            QueueOrder = queueOrder;
+        }
 
         public Guid? PatientProfileId { get; private set; }
         public PatientProfile? PatientProfile { get; private set; }
 
         public string? WalkInName { get; private set; }
         public string? PhoneNumber { get; private set; }
+        public int? WalkInAge { get; private set; }
 
         public QueueTokenStatus Status { get; private set; }
 
         public DateTime CreatedAt { get; private set; }
 
         public DateTime? CalledAt { get; private set; }
+
+        public DateTime? LateArrivedAt { get; private set; }
 
         public DateTime? StartedConsultationAt { get; private set; }
 
@@ -99,13 +115,15 @@ namespace DigiLine.Domain.Entities
             CalledAt = calledAt;
         }
 
-        public void MarkLate()
+        public void MarkLate(DateTime? arrivedAt = null, long? queueOrder = null)
         {
             if (Status != QueueTokenStatus.Skipped)
                 throw new InvalidOperationException(
                     "Only a skipped token can be marked late.");
 
             Status = QueueTokenStatus.Late;
+            LateArrivedAt = arrivedAt ?? DateTime.UtcNow;
+            if (queueOrder.HasValue) AssignQueueOrder(queueOrder.Value);
         }
 
         public void Recall(DateTime recalledAt)
@@ -135,6 +153,15 @@ namespace DigiLine.Domain.Entities
 
             Status = QueueTokenStatus.Completed;
             CompletedAt = completedAt;
+        }
+
+        public DateTime? FinalizedAt { get; private set; }
+
+        public void FinalizeNoShow(DateTime now)
+        {
+            if (Status != QueueTokenStatus.Skipped) throw new InvalidOperationException("Only skipped tokens can be finalized as NoShow.");
+            Status = QueueTokenStatus.NoShow;
+            FinalizedAt = now;
         }
 
         public void Cancel()

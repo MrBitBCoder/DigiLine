@@ -30,6 +30,7 @@ namespace DigiLine.Infrastructure.Persistence.Transactions
         private sealed class EfTransaction : ITransaction
         {
             private readonly IDbContextTransaction _transaction;
+            private bool _disposed;
 
             public EfTransaction(IDbContextTransaction transaction)
             {
@@ -40,6 +41,7 @@ namespace DigiLine.Infrastructure.Persistence.Transactions
                 CancellationToken cancellationToken = default)
             {
                 await _transaction.CommitAsync(cancellationToken);
+                await DisposeAsync(); // Release the connection before post-commit event publication opens another scope.
             }
 
             public async Task RollbackAsync(
@@ -50,6 +52,8 @@ namespace DigiLine.Infrastructure.Persistence.Transactions
 
             public async ValueTask DisposeAsync()
             {
+                if (_disposed) return;
+                _disposed = true;
                 await _transaction.DisposeAsync();
             }
         }

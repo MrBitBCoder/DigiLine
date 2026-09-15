@@ -43,7 +43,10 @@ namespace DigiLine.Application.Queue
             CancellationToken cancellationToken = default)
         {
 
-            var session = await _sessionRepository.GetByIdAsync(
+            await using var transaction =
+                await _transactionManager.BeginAsync(
+                    cancellationToken);
+        var session = await _sessionRepository.GetByIdAsync(
                         sessionId,
                         cancellationToken);
 
@@ -76,9 +79,6 @@ namespace DigiLine.Application.Queue
                     "Patient profile was not found.");
             }
 
-            await using var transaction =
-                await _transactionManager.BeginAsync(
-                    cancellationToken);
 
 
             var tokenNumber =
@@ -90,6 +90,10 @@ namespace DigiLine.Application.Queue
                 sessionId,
                 tokenNumber,
                 patientProfileId);
+
+            queueToken.AssignQueueOrder(
+                await _queueTokenRepository.AllocateNextQueueOrderAsync(sessionId, cancellationToken)
+                    ?? throw new InvalidOperationException("Session was not found."));
 
             await _queueTokenRepository.AddAsync(
                 queueToken,

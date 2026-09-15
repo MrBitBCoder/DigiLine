@@ -20,6 +20,8 @@ public class MarkTokenLateServiceTests
         Assert.Equal(token.Id, result.Id);
         Assert.Equal(QueueTokenStatus.Late, result.Status);
         Assert.NotNull(result.CalledAt);
+        Assert.NotNull(result.LateArrivedAt);
+        Assert.Equal(DateTimeKind.Utc, result.LateArrivedAt!.Value.Kind);
         Assert.Equal(1, repository.SaveCount);
     }
 
@@ -146,6 +148,7 @@ public class MarkTokenLateServiceTests
         public Task<QueueToken?> GetNextWaitingForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int?> GetMaximumTokenNumberAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int?> AllocateNextTokenNumberAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<long?> AllocateNextQueueOrderAsync(Guid sessionId, CancellationToken cancellationToken = default) => Task.FromResult<long?>(_tokens.Max(token => token.QueueOrder) + 1);
         public Task AddAsync(QueueToken queueToken, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

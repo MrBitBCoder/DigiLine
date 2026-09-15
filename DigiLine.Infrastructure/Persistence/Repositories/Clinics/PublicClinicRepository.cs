@@ -39,8 +39,8 @@ public sealed class PublicClinicRepository : IPublicClinicRepository
                                 token.Status,
                                 token.CreatedAt,
                                 token.CalledAt))
-                            .ToList()))
-                    .ToList()))
+                            .ToList(), session.BookingStoppedAt))
+                    .ToList(), clinic.TimeZoneId))
             .SingleOrDefaultAsync(cancellationToken);
     }
 }

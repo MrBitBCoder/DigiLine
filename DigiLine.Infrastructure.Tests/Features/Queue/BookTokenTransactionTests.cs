@@ -17,7 +17,7 @@ namespace DigiLine.Infrastructure.Tests
                 .Build();
 
             var connectionString =
-                configuration.GetConnectionString("DigiLine");
+                Environment.GetEnvironmentVariable("DIGILINE_TEST_CONNECTION") ?? configuration.GetConnectionString("DigiLine");
 
             if (string.IsNullOrWhiteSpace(connectionString))
             {
@@ -219,7 +219,7 @@ namespace DigiLine.Infrastructure.Tests
 
             session.OpenBooking();
             session.Start();
-            session.Close();
+            session.StopBooking(DateTime.UtcNow); session.CompleteSession(DateTime.UtcNow);
 
             await dbContext.SaveChangesAsync();
 

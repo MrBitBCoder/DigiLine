@@ -36,9 +36,13 @@ namespace DigiLine.Application.Queue
             Guid sessionId,
             string walkInName,
             string? phoneNumber,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? age = null)
         {
-            var session = await _sessionRepository.GetByIdAsync(
+            await using var transaction =
+                await _transactionManager.BeginAsync(
+                    cancellationToken);
+        var session = await _sessionRepository.GetByIdAsync(
                 sessionId,
                 cancellationToken);
 
@@ -48,21 +52,18 @@ namespace DigiLine.Application.Queue
                     "Session was not found.");
             }
 
-            if (!session.IsBookingOpen(DateTime.UtcNow))
-            {
-                throw new InvalidOperationException(
-                    "Booking is not currently open for this session.");
-            }
-
             if (session.Status == SessionStatus.Closed)
             {
                 throw new InvalidOperationException(
                     "Cannot create a token for a closed session.");
             }
 
-            await using var transaction =
-                await _transactionManager.BeginAsync(
-                    cancellationToken);
+            if (!session.IsBookingOpen(DateTime.UtcNow))
+            {
+                throw new InvalidOperationException(
+                    "Booking is not currently open for this session.");
+            }
+
 
             var tokenNumber =
                 await _tokenNumberService.GetNextTokenNumberAsync(
@@ -73,7 +74,12 @@ namespace DigiLine.Application.Queue
                 sessionId,
                 tokenNumber,
                 walkInName,
-                phoneNumber);
+                phoneNumber,
+                age);
+
+            queueToken.AssignQueueOrder(
+                await _queueTokenRepository.AllocateNextQueueOrderAsync(sessionId, cancellationToken)
+                    ?? throw new InvalidOperationException("Session was not found."));
 
             await _queueTokenRepository.AddAsync(
                 queueToken,

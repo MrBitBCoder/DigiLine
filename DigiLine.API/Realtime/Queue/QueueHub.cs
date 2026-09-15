@@ -8,9 +8,11 @@ namespace DigiLine.API.Realtime;
 [Authorize(Roles = "Doctor,Receptionist")]
 public sealed class QueueHub : Hub
 {
+    private readonly StaffSubscriptions? _subscriptions;
     private readonly ISessionRepository _sessions;
 
-    public QueueHub(ISessionRepository sessions) => _sessions = sessions;
+    public QueueHub(ISessionRepository sessions, StaffSubscriptions? subscriptions = null) { _sessions = sessions; _subscriptions = subscriptions; }
+    public override Task OnDisconnectedAsync(Exception? exception) { _subscriptions?.RemoveConnection(Context.ConnectionId); return base.OnDisconnectedAsync(exception); }
 
     public async Task JoinSession(Guid sessionId)
     {
@@ -25,15 +27,19 @@ public sealed class QueueHub : Hub
         }
 
         var session = await _sessions.GetByIdAsync(sessionId);
-        var role = Context.User?.FindFirstValue(ClaimTypes.Role);
+
         var accountClaim = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? Context.User?.FindFirstValue("sub");
-        var isDoctorOwner = role == "Doctor" && Guid.TryParse(accountClaim, out var doctorId)
+        var isDoctorOwner = Context.User!.IsInRole("Doctor") && Guid.TryParse(accountClaim, out var doctorId)
             && session?.DoctorId == doctorId;
-        var isReceptionClinic = role == "Receptionist";
+        var isReceptionClinic = Context.User!.IsInRole("Receptionist");
         if (session?.ClinicId != clinicId || (!isDoctorOwner && !isReceptionClinic))
             throw new HubException("The session is not available to this account.");
 
+        if (_subscriptions is not null && Guid.TryParse(accountClaim, out var staffId) &&
+            Guid.TryParse(Context.User?.FindFirstValue("password_version"), out var version) &&
+            long.TryParse(Context.User?.FindFirstValue("exp"), out var expires))
+            _subscriptions.Add(new(Context.ConnectionId, sessionId, staffId, version, DateTimeOffset.FromUnixTimeSeconds(expires).UtcDateTime));
         await Groups.AddToGroupAsync(
             Context.ConnectionId,
             QueueHubContract.SessionGroup(sessionId));
@@ -46,6 +52,7 @@ public sealed class QueueHub : Hub
             throw new HubException("A valid session ID is required.");
         }
 
+        _subscriptions?.Remove(Context.ConnectionId, sessionId);
         return Groups.RemoveFromGroupAsync(
             Context.ConnectionId,
             QueueHubContract.SessionGroup(sessionId));
