@@ -2,6 +2,7 @@ using DigiLine.Application.Patients;
 using DigiLine.Application.Queue;
 using DigiLine.Application.Sessions;
 using DigiLine.Domain.Entities;
+using DigiLine.Domain.Common;
 
 namespace DigiLine.Application.Tests;
 
@@ -33,6 +34,29 @@ public class PublicQueueServiceTests
         Assert.False(booking.WasCalled);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetTokenAsync_AfterBookingStops_PreservesExistingTokenAndNowServing(bool paused)
+    {
+        var now = DateTime.UtcNow;
+        var session = new Session(Guid.NewGuid(), Guid.NewGuid(), "Live", now.AddHours(-2), now.AddHours(-1), now.AddHours(1), now.AddHours(1), 10);
+        session.OpenBooking(); session.Start();
+        if (paused) session.Pause();
+        session.StopBooking(now);
+        var token = new QueueToken(session.Id, 7, Guid.NewGuid());
+        token.Call(now);
+        var service = new PublicQueueService(new StubAccessService(), new StubPatientRepository(true), new StubBookingService(),
+            new StubTokenRepository(token), new StubSessionRepository(session), new StubPositionService(), new StubWaitService());
+        var result = await service.GetTokenAsync("access", session.Id, token.Id);
+        Assert.NotNull(result);
+        Assert.Equal(7, result.TokenNumber);
+        Assert.Equal(7, result.CurrentTokenNumber);
+        Assert.Equal(paused, result.IsPaused);
+        Assert.Equal(paused ? SessionStatus.Paused : SessionStatus.Running, result.SessionStatus);
+        Assert.False(session.IsBookingOpen(now));
+    }
+
     private static PublicQueueService CreateService(QueueToken? token, StubBookingService booking, bool ownsProfile) =>
         new(new StubAccessService(), new StubPatientRepository(ownsProfile), booking,
             new StubTokenRepository(token), new StubSessionRepository(),
@@ -59,17 +83,17 @@ public class PublicQueueServiceTests
     private sealed class StubTokenRepository(QueueToken? token) : IQueueTokenRepository
     {
         public Task<QueueToken?> GetActiveByPatientAsync(Guid sessionId, Guid patientProfileId, CancellationToken cancellationToken = default) => Task.FromResult(token);
-        public Task<QueueToken?> GetByIdAsync(Guid sessionId, Guid tokenId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<QueueToken>> GetBySessionOrderedAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<QueueToken?> GetByIdAsync(Guid sessionId, Guid tokenId, CancellationToken cancellationToken = default) => Task.FromResult(token?.SessionId == sessionId && token.Id == tokenId ? token : null);
+        public Task<IReadOnlyList<QueueToken>> GetBySessionOrderedAsync(Guid sessionId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<QueueToken>>(token is null ? [] : [token]);
         public Task<QueueToken?> GetNextWaitingForUpdateAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int?> GetMaximumTokenNumberAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int?> AllocateNextTokenNumberAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task AddAsync(QueueToken queueToken, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
-    private sealed class StubSessionRepository : ISessionRepository
+    private sealed class StubSessionRepository(Session? session = null) : ISessionRepository
     {
-        public Task<Session?> GetByIdAsync(Guid sessionId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Session?> GetByIdAsync(Guid sessionId, CancellationToken cancellationToken = default) => Task.FromResult(session);
         public Task AddAsync(Session session, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }

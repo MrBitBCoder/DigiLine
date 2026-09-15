@@ -3,6 +3,7 @@ namespace DigiLine.Application.Administration;
 
 public sealed record RegisterClinicRequest(string ClinicName, string Slug, string TimeZoneId, string Name, string Email, string Password, bool AlsoDoctor);
 public sealed record StaffUpdateRequest(string Name, StaffRole[] Roles, bool IsActive);
+public sealed record CreateStaffRequest(string Name, string Email, StaffRole[] Roles, string Password);
 public sealed record InviteStaffRequest(string Name, string Email, StaffRole[] Roles);
 public sealed record AcceptInvitationRequest(string Token, string Password);
 public sealed record ClinicUpdateRequest(string Name, string TimeZoneId);
@@ -14,6 +15,7 @@ public interface IAdministrationService
     Task<object> GetClinicAsync(Guid clinicId, CancellationToken ct);
     Task UpdateClinicAsync(Guid clinicId, Guid actorId, ClinicUpdateRequest request, CancellationToken ct);
     Task<PageResult<StaffView>> ListAsync(Guid clinicId, int page, int pageSize, CancellationToken ct);
+    Task<StaffView> CreateAsync(Guid clinicId, Guid actorId, CreateStaffRequest request, CancellationToken ct);
     Task<StaffView> InviteAsync(Guid clinicId, Guid actorId, InviteStaffRequest request, CancellationToken ct);
     Task UpdateAsync(Guid clinicId, Guid actorId, Guid staffId, StaffUpdateRequest request, CancellationToken ct);
     Task<bool> ResendAsync(Guid clinicId, Guid actorId, Guid staffId, CancellationToken ct);

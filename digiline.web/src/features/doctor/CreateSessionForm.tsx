@@ -14,19 +14,25 @@ export function CreateSessionForm({ onSaved, session, onCancel, timeZoneId = def
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const hasStarted = session?.status === "Running" || session?.status === "Paused" || session?.status === "Closed";
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     let start: Date, end: Date, bookingOpen: Date | null;
     try {
-      start = new Date(clinicInputToUtc(startTime, timeZoneId));
-      end = new Date(clinicInputToUtc(endTime, timeZoneId));
-      bookingOpen = bookingOpenTime ? new Date(clinicInputToUtc(bookingOpenTime, timeZoneId)) : null;
+      start = new Date(session && startTime === clinicDateTimeInput(session.startTime, timeZoneId) ? session.startTime : clinicInputToUtc(startTime, timeZoneId));
+      end = new Date(session && endTime === clinicDateTimeInput(session.endTime, timeZoneId) ? session.endTime : clinicInputToUtc(endTime, timeZoneId));
+      bookingOpen = bookingOpenTime ? new Date(session && bookingOpenTime === clinicDateTimeInput(session.bookingOpenTime, timeZoneId) ? session.bookingOpenTime : clinicInputToUtc(bookingOpenTime, timeZoneId)) : null;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Invalid clinic time.");
       return;
     }
-    if (start <= new Date() || end <= start) {
-      setError("Choose a future start time and an end time after it.");
+    if ((!session || start.getTime() !== new Date(session.startTime).getTime()) && !hasStarted && start <= new Date()) {
+      setError("Choose a future start time when rescheduling.");
+      return;
+    }
+    if (end <= start) {
+      setError("End time must be after start time.");
       return;
     }
     if (bookingOpen && (Number.isNaN(bookingOpen.getTime()) || bookingOpen >= start)) {
@@ -38,10 +44,10 @@ export function CreateSessionForm({ onSaved, session, onCancel, timeZoneId = def
     try {
       const details = {
         name: name.trim(),
-        startTime: start.toISOString(),
-        endTime: end.toISOString(),
+        startTime: session && startTime === clinicDateTimeInput(session.startTime, timeZoneId) ? session.startTime : start.toISOString(),
+        endTime: session && endTime === clinicDateTimeInput(session.endTime, timeZoneId) ? session.endTime : end.toISOString(),
         averageConsultationMinutes: averageMinutes,
-        bookingOpenTime: bookingOpen?.toISOString() ?? null,
+        bookingOpenTime: session && bookingOpenTime === clinicDateTimeInput(session.bookingOpenTime, timeZoneId) ? session.bookingOpenTime : bookingOpen?.toISOString() ?? null,
       };
       const id = session ? (await doctorApi.updateSession(session.id, details), session.id)
         : (await doctorApi.createSession(details)).id;
@@ -60,11 +66,11 @@ export function CreateSessionForm({ onSaved, session, onCancel, timeZoneId = def
   }
 
   return <Card className="create-session-card">
-    <div><span className="eyebrow">Plan ahead</span><h2>{session ? "Edit session" : "Create session"}</h2><p>{session ? "Only a future session without tokens can be changed." : "Leave booking-open time blank to open booking now."} Times are in {timeZoneId}.</p></div>
+    <div><span className="eyebrow">Plan ahead</span><h2>{session ? "Edit session" : "Create session"}</h2><p>{session ? "Sessions can be changed while no queue tokens have been assigned." : "Leave booking-open time blank to open booking now."} {hasStarted && "Booking-open and start times are fixed because this session has started."} Times are in {timeZoneId}.</p></div>
     <form onSubmit={submit} className="create-session-form">
       <TextField label="Session name" value={name} onChange={event => setName(event.target.value)} required maxLength={120} />
-      <TextField label="Booking opens (optional)" type="datetime-local" value={bookingOpenTime} onChange={event => setBookingOpenTime(event.target.value)} />
-      <TextField label="Start time" type="datetime-local" value={startTime} onChange={event => setStartTime(event.target.value)} required />
+      <TextField label="Booking opens (optional)" type="datetime-local" disabled={hasStarted} value={bookingOpenTime} onChange={event => setBookingOpenTime(event.target.value)} />
+      <TextField label="Start time" type="datetime-local" disabled={hasStarted} value={startTime} onChange={event => setStartTime(event.target.value)} required />
       <TextField label="End time" type="datetime-local" value={endTime} onChange={event => setEndTime(event.target.value)} required />
       <TextField label="Average visit (minutes)" type="number" min={1} max={240} value={averageMinutes} onChange={event => setAverageMinutes(Number(event.target.value))} required />
       {error && <p role="alert" className="form-error">{error}</p>}

@@ -6,6 +6,58 @@ namespace DigiLine.Application.Tests;
 
 public class SessionLifecycleServiceTests
 {
+    [Theory]
+    [InlineData(SessionStatus.Scheduled)]
+    [InlineData(SessionStatus.BookingOpen)]
+    [InlineData(SessionStatus.Closed)]
+    public async Task StopBooking_RejectsSessionThatIsNotRunningOrPaused(SessionStatus status)
+    {
+        var session = CreateSession();
+        if (status != SessionStatus.Scheduled) session.OpenBooking();
+        if (status == SessionStatus.Closed) { session.Start(); session.StopBooking(DateTime.UtcNow); session.CompleteSession(DateTime.UtcNow); }
+        var before = session.BookingStoppedAt;
+        var repository = new StubRepository(session);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => new SessionLifecycleService(repository).StopBookingAsync(session.Id));
+        Assert.Contains("running or paused", error.Message);
+        Assert.Equal(before, session.BookingStoppedAt);
+        Assert.Equal(status, session.Status);
+        Assert.Equal(0, repository.SaveCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StopBooking_AcceptsStartedSessionAndPreservesFirstStopTime(bool paused)
+    {
+        var session = CreateSession(); session.OpenBooking(); session.Start();
+        if (paused) session.Pause();
+        var repository = new StubRepository(session);
+        var service = new SessionLifecycleService(repository);
+        await service.StopBookingAsync(session.Id);
+        var first = session.BookingStoppedAt;
+        await service.StopBookingAsync(session.Id);
+        Assert.NotNull(first);
+        Assert.Equal(first, session.BookingStoppedAt);
+        Assert.Equal(paused ? SessionStatus.Paused : SessionStatus.Running, session.Status);
+        Assert.False(session.IsBookingOpen(DateTime.UtcNow));
+    }
+
+    [Fact]
+    public async Task StopBookingPreservesRunningStatusUntilExplicitCompletion()
+    {
+        var session = CreateSession(); session.OpenBooking(); session.Start();
+        var repository = new StubRepository(session);
+        var service = new SessionLifecycleService(repository);
+        var stopped = await service.StopBookingAsync(session.Id);
+        Assert.Equal(SessionStatus.Running, stopped.Status);
+        Assert.False(session.IsBookingOpen(DateTime.UtcNow));
+        Assert.Null(session.CompletedAt);
+        var completed = await service.CompleteAsync(session.Id, true);
+        Assert.Equal(SessionStatus.Closed, completed.Status);
+        Assert.NotNull(session.CompletedAt);
+        Assert.False(session.IsBookingOpen(DateTime.UtcNow));
+        Assert.Equal(2, repository.SaveCount);
+    }
     [Fact]
     public async Task StartAsync_WhenBookingIsOpen_StartsAndPersists()
     {

@@ -1,4 +1,5 @@
 using DigiLine.Application.Clinics;
+using DigiLine.Domain.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace DigiLine.Infrastructure.Persistence.Repositories;
@@ -24,7 +25,8 @@ public sealed class PublicClinicRepository : IPublicClinicRepository
                 clinic.Slug,
                 _dbContext.Sessions
                     .Where(session => session.ClinicId == clinic.Id
-                        && session.EndTime >= sessionsEndingAfter)
+                        && (session.EndTime >= sessionsEndingAfter
+                            || session.Status == SessionStatus.Running || session.Status == SessionStatus.Paused))
                     .Select(session => new PublicSessionRecord(
                         session.Id,
                         session.Name,

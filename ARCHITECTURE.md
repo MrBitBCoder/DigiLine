@@ -27,7 +27,7 @@ Controllers derive clinic and staff scope from JWT claims. Doctor operations ver
 
 ## Deliberate boundaries
 
-Registration atomically creates an active clinic and its first administrator. Staff-role associations support multiple roles, while globally unique staff emails retain one clinic per account. Invitations use hashed, expiring single-use tokens and SMTP. Account/role changes revoke staff credentials, including realtime delivery eligibility.
+Registration atomically creates an active clinic and its first administrator. Staff-role associations support multiple roles, while globally unique staff emails retain one clinic per account. Admin staff creation validates passwords with the shared policy and hashes them with the existing Identity-backed hasher. New staff are active immediately. Legacy invitations retain hashed, expiring single-use tokens and SMTP support. Account/role changes revoke staff credentials, including realtime delivery eligibility.
 
 Session, booking, and queue mutations acquire the session lock first inside SQL transactions. BookingStoppedAt is independent of lifecycle state. Completion checks blocking counts and atomically finalizes confirmed Skipped tokens to NoShow; historical Closed sessions are preserved. Events are published after commit and transaction disposal.
 

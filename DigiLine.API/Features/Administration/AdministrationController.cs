@@ -33,7 +33,7 @@ public sealed class AdministrationController(IAdministrationService administrati
     [HttpGet("staff")]
     public async Task<IActionResult> List(CancellationToken ct, int page = 1, int pageSize = 10) => Ok(await administration.ListAsync(ClinicId, page, pageSize, ct));
     [HttpPost("staff"), EnableRateLimiting("password-reset")]
-    public async Task<IActionResult> Invite(InviteStaffRequest request, CancellationToken ct) => Ok(await administration.InviteAsync(ClinicId, ActorId, request, ct));
+    public async Task<IActionResult> Create(CreateStaffRequest request, CancellationToken ct) => Ok(await administration.CreateAsync(ClinicId, ActorId, request, ct));
     [HttpPut("staff/{id:guid}")]
     public async Task<IActionResult> Update(Guid id, StaffUpdateRequest request, CancellationToken ct)
     { await administration.UpdateAsync(ClinicId, ActorId, id, request, ct); return NoContent(); }

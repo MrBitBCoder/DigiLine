@@ -6,11 +6,13 @@ Set `ASPNETCORE_ENVIRONMENT=Production`, `ConnectionStrings__DigiLine`, a strong
 
 Clinic time zones govern scheduling and date filters; timestamps are stored in UTC. Existing clinics default to `ClinicTime__DefaultTimeZoneId` (normally Asia/Kolkata). Review the existing-time audit in the root README before correcting historical timestamps.
 
-## Invitations and staff access
+## Staff creation and legacy invitations
 
 Configure `Smtp__Host`, `Smtp__Port`, `Smtp__From`, `Smtp__Username`, and `Smtp__Password`. Set `PasswordReset__PublicBaseUrl` to the HTTPS frontend origin; both invitation and recovery links use it. The sender enables TLS, so the SMTP endpoint or local test sink must support STARTTLS. Verify delivery before inviting real staff.
 
-In **Clinic administration**, invite staff with their name, email, and roles. Invitation links expire after 48 hours and work once. Acceptance sets the password and activates the account. Resend invalidates the old link; revoke prevents acceptance. Delivery failures appear in administration with a retry/resend action. Password-reset links separately expire after 30 minutes.
+In **Clinic administration**, use **Add staff** with name, email, roles, password, and matching confirmation. The backend enforces the existing password policy and stores an Identity password hash. Accounts are active immediately; new staff creation does not need SMTP or send email.
+
+Previously issued invitation links remain supported and expire after 48 hours; each works once. Acceptance sets the password and activates the account. Resend invalidates the old link; revoke prevents acceptance. Delivery failures appear in administration with a retry/resend action. Password-reset links separately expire after 30 minutes.
 
 Accounts belong to one clinic and emails are globally unique. Admin, Doctor, and Receptionist roles can be combined. Navigation displays permitted workspaces. Edit names/roles or deactivate/reactivate accounts from the staff table; historical staff records are retained. Access changes invalidate existing credentials. Staff must sign in again after role changes. The last active administrator cannot be removed or deactivated. A doctor with unfinished sessions cannot lose Doctor access or be deactivated. Administrative changes produce audit records.
 

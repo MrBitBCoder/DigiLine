@@ -32,15 +32,44 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
     }
     private Task<HttpResponseMessage> WalkIn(Guid id, string name="Patient") => factory.Reception.PostAsJsonAsync("/api/reception/queue/walk-in", new { sessionId=id,walkInName=name,age=30 });
     [Fact]
-    public async Task ProductionRegistrationAndInvitationWorkWithoutSeeds()
+    public async Task ProductionRegistrationAndDirectStaffCreationWorkWithoutSeeds()
     {
         using var scope = factory.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<DigiLineDbContext>();
         Assert.False(await db.Clinics.AnyAsync(x => x.Slug == "dev-clinic"));
-        Assert.Equal(2, await db.Staff.CountAsync());
-        var replay = await factory.Public.PostAsJsonAsync("/api/auth/accept-invitation", new { token=factory.Mail.Token,password=ApiFactory.Password });
-        Assert.Equal(HttpStatusCode.BadRequest,replay.StatusCode);
+        Assert.True(await db.Staff.CountAsync() >= 2);
+        var staff = await db.Staff.Include(x => x.Roles).SingleAsync(x => x.Email == "reception@verification.local");
+        Assert.True(staff.IsActive);
+        Assert.False(staff.InvitationPending);
+        Assert.NotEqual(ApiFactory.Password, staff.PasswordHash);
+        Assert.True(new PasswordHasher().Verify(ApiFactory.Password, staff.PasswordHash));
+        Assert.Empty(await db.StaffInvitations.ToListAsync());
+        Assert.Equal("", factory.Mail.Token);
         Assert.Equal(HttpStatusCode.OK,(await factory.Doctor.GetAsync("/api/admin/clinic")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await factory.Reception.GetAsync("/api/admin/clinic")).StatusCode);
+    }
+    [Theory]
+    [InlineData("short")]
+    [InlineData("NoNumbersHere!")]
+    [InlineData("NoSymbols12345")]
+    public async Task AdminCreationRejectsInvalidPassword(string password)
+    {
+        var response = await factory.Doctor.PostAsJsonAsync("/api/admin/staff", new { name="Invalid",email=$"{Guid.NewGuid()}@example.test",roles=new[]{2},password });
+        Assert.Equal(HttpStatusCode.BadRequest,response.StatusCode);
+    }
+    [Fact]
+    public async Task AdminCreationResponseDoesNotExposePasswordAndRejectsNonAdmin()
+    {
+        await using var isolated = new ApiFactory();
+        await isolated.InitializeAsync();
+        var body = new { name="New doctor",email=$"{Guid.NewGuid()}@example.test",roles=new[]{1,2},password=ApiFactory.Password };
+        Assert.Equal(HttpStatusCode.Forbidden,(await isolated.Reception.PostAsJsonAsync("/api/admin/staff",body)).StatusCode);
+        var result = await Json(await isolated.Doctor.PostAsJsonAsync("/api/admin/staff",body));
+        Assert.True(result.GetProperty("isActive").GetBoolean());
+        Assert.False(result.GetProperty("invitationPending").GetBoolean());
+        Assert.False(result.TryGetProperty("password",out _));
+        Assert.False(result.TryGetProperty("passwordHash",out _));
+        Assert.Equal(new[]{1,2},result.GetProperty("roles").EnumerateArray().Select(x=>x.GetInt32()).OrderBy(x=>x));
+        Assert.Equal(HttpStatusCode.OK,(await isolated.Public.PostAsJsonAsync("/api/auth/login",new {body.email,body.password})).StatusCode);
     }
     [Theory]
     [InlineData("/api/queue/walk-in", "POST")]
@@ -57,6 +86,22 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
         Assert.Equal(HttpStatusCode.Unauthorized,(await factory.Public.PostAsJsonAsync("/api/reception/queue/walk-in",new {sessionId=id,walkInName="No auth",age=30})).StatusCode);
     }
     [Fact]
+    public async Task StopBookingRequiresStartingSessionAndThenAllowsCompletion()
+    {
+        var start = DateTime.UtcNow.AddMinutes(5);
+        var created = await Json(await factory.Doctor.PostAsJsonAsync("/api/doctor/sessions", new { name="Start before stop",startTime=start,endTime=start.AddHours(1),averageConsultationMinutes=5 }));
+        var id = created.GetProperty("id").GetGuid();
+        var rejected = await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/stop-booking",null);
+        Assert.Equal(HttpStatusCode.BadRequest,rejected.StatusCode);
+        Assert.Contains("running or paused",await rejected.Content.ReadAsStringAsync());
+        await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/start",null));
+        await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/stop-booking",null));
+        await Json(await factory.Doctor.PostAsJsonAsync($"/api/doctor/sessions/{id}/complete",new {confirmSkipped=true}));
+        var details = await Json(await factory.Doctor.GetAsync($"/api/doctor/sessions/{id}"));
+        Assert.Equal(5,details.GetProperty("session").GetProperty("status").GetInt32());
+        Assert.False(details.GetProperty("session").GetProperty("isBookingOpen").GetBoolean());
+    }
+    [Fact]
     public async Task StopBookingThenCompleteRequiresResolvingQueueAndSkippedConfirmation()
     {
         var id=await Session(); await Json(await WalkIn(id));
@@ -68,6 +113,10 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
         Assert.Equal(HttpStatusCode.Conflict,(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/close",null)).StatusCode);
         await Json(await factory.Doctor.PostAsJsonAsync($"/api/doctor/sessions/{id}/complete",new {confirmSkipped=true}));
         var details=await Json(await factory.Doctor.GetAsync($"/api/doctor/sessions/{id}?filter=Other%20finished"));
+        Assert.Equal(5, details.GetProperty("session").GetProperty("status").GetInt32());
+        Assert.False(details.GetProperty("session").GetProperty("isBookingOpen").GetBoolean());
+        var reception = await Json(await factory.Reception.GetAsync($"/api/reception/sessions/{id}"));
+        Assert.Equal(5, reception.GetProperty("session").GetProperty("status").GetInt32());
         var finished=details.GetProperty("queue")[0]; Assert.Equal(8,finished.GetProperty("status").GetInt32()); Assert.Equal(JsonValueKind.Null,finished.GetProperty("completedAt").ValueKind); Assert.NotEqual(JsonValueKind.Null,finished.GetProperty("finalizedAt").ValueKind);
         Assert.Equal(HttpStatusCode.BadRequest,(await factory.Reception.PostAsync($"/api/reception/sessions/{id}/tokens/{token}/late",null)).StatusCode);
         await Json(await factory.Doctor.PostAsJsonAsync($"/api/doctor/sessions/{id}/complete",new {confirmSkipped=true}));
@@ -137,8 +186,7 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
             Public=CreateClient(new(){BaseAddress=new Uri("https://localhost")});Doctor=CreateClient(new(){BaseAddress=new Uri("https://localhost")});Reception=CreateClient(new(){BaseAddress=new Uri("https://localhost")});
             var register=await Json(await Public.PostAsJsonAsync("/api/auth/register",new {clinicName="Production journey",slug="production-journey",timeZoneId="Asia/Kolkata",name="Owner",email="owner@verification.local",password=Password,alsoDoctor=true}));
             Doctor.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",register.GetProperty("token").GetString());
-            await Json(await Doctor.PostAsJsonAsync("/api/admin/staff",new {name="Reception",email="reception@verification.local",roles=new[]{2}}));
-            Assert.Equal(HttpStatusCode.NoContent,(await Public.PostAsJsonAsync("/api/auth/accept-invitation",new {token=Mail.Token,password=Password})).StatusCode);
+            await Json(await Doctor.PostAsJsonAsync("/api/admin/staff",new {name="Reception",email="reception@verification.local",roles=new[]{2},password=Password}));
             var login=await Json(await Public.PostAsJsonAsync("/api/auth/login",new {email="reception@verification.local",password=Password}));
             Reception.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",login.GetProperty("token").GetString());
         }

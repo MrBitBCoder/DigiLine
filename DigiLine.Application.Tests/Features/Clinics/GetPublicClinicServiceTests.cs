@@ -35,7 +35,7 @@ public class GetPublicClinicServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_ShowsOnlyBookableStatusesWithinBookingWindow()
+    public async Task GetAsync_ShowsLiveSessionsIndependentlyOfBookingWindow()
     {
         PublicSessionRecord Session(SessionStatus status, DateTime bookingOpen, DateTime lastBooking) =>
             new(Guid.NewGuid(), status.ToString(), bookingOpen, Now.AddHours(-1), Now.AddHours(2),
@@ -53,8 +53,46 @@ public class GetPublicClinicServiceTests
         var result = await new GetPublicClinicService(repository, new TestClock(Now)).GetAsync("clinic");
 
         Assert.NotNull(result);
-        Assert.Equal(new[] { SessionStatus.Running, SessionStatus.BookingOpen, SessionStatus.Paused },
+        Assert.Equal(new[] { SessionStatus.Running, SessionStatus.BookingOpen, SessionStatus.Paused, SessionStatus.Running, SessionStatus.Running },
             result.Sessions.Select(session => session.Status));
+    }
+
+    [Theory]
+    [InlineData(SessionStatus.Running)]
+    [InlineData(SessionStatus.Paused)]
+    public async Task StoppedBooking_PreservesLiveSessionAndCurrentToken(SessionStatus status)
+    {
+        var record = new PublicSessionRecord(Guid.NewGuid(), "Live", Now.AddHours(-2), Now.AddHours(-1),
+            Now.AddHours(2), Now.AddHours(1), status,
+            [new(7, QueueTokenStatus.InConsultation, Now.AddMinutes(-20), Now.AddMinutes(-5))], Now.AddMinutes(-1));
+        var repository = new StubRepository(new PublicClinicRecord(Guid.NewGuid(), "Clinic", "clinic", [record]));
+        var result = await new GetPublicClinicService(repository, new TestClock(Now)).GetAsync("clinic");
+        var session = Assert.Single(result!.Sessions);
+        Assert.False(session.IsBookingOpen);
+        Assert.Equal(status, session.Status);
+        Assert.Equal(7, session.CurrentTokenNumber);
+    }
+
+    [Theory]
+    [InlineData(SessionStatus.Running)]
+    [InlineData(SessionStatus.Paused)]
+    public async Task PastScheduledEnd_RemainsLiveWithoutAcceptingBookings(SessionStatus status)
+    {
+        var record = new PublicSessionRecord(Guid.NewGuid(), "Overrun", Now.AddDays(-2), Now.AddDays(-1),
+            Now.AddHours(-12), Now.AddHours(-12), status, []);
+        var result = await new GetPublicClinicService(new StubRepository(new PublicClinicRecord(
+            Guid.NewGuid(), "Clinic", "clinic", [record])), new TestClock(Now)).GetAsync("clinic");
+        Assert.False(Assert.Single(result!.Sessions).IsBookingOpen);
+    }
+
+    [Fact]
+    public async Task CompletedSession_IsStillExcluded()
+    {
+        var record = new PublicSessionRecord(Guid.NewGuid(), "Completed", Now.AddHours(-2), Now.AddHours(-1),
+            Now.AddHours(2), Now.AddHours(1), SessionStatus.Closed, [], Now);
+        var result = await new GetPublicClinicService(new StubRepository(new PublicClinicRecord(
+            Guid.NewGuid(), "Clinic", "clinic", [record])), new TestClock(Now)).GetAsync("clinic");
+        Assert.Empty(result!.Sessions);
     }
 
     [Fact]

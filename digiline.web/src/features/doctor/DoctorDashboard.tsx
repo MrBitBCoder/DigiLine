@@ -324,7 +324,7 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
     {session.status === "Paused" && <Button disabled={!!pendingAction} onClick={() => void runAction("resume-session", () => doctorApi.resumeSession(session.id))}>Resume</Button>}
 
-    {session.status !== "Closed" && !bookingsStopped && <Button disabled={!!pendingAction} variant="danger" onClick={() => confirm({ title: "Stop booking?", message: "No more public or walk-in bookings will be accepted. Continue serving the existing queue. Booking cannot reopen for this session.", label: "Stop booking", actionKey: "stop-booking", run: () => doctorApi.stopBooking(session.id) })}>Stop booking</Button>}
+    {(running || session.status === "Paused") && !bookingsStopped && <Button disabled={!!pendingAction} variant="danger" onClick={() => confirm({ title: "Stop booking?", message: "No more public or walk-in bookings will be accepted. Continue serving the existing queue. Booking cannot reopen for this session.", label: "Stop booking", actionKey: "stop-booking", run: () => doctorApi.stopBooking(session.id) })}>Stop booking</Button>}
 
     {(running || session.status === "Paused") && <Button disabled={!!pendingAction || !bookingsStopped || unfinished > 0} title={!bookingsStopped ? "Stop booking first" : unfinished ? `Resolve ${unfinished} unfinished tokens first` : undefined} onClick={() => confirm({ title: `Complete ${session.name}?`, message: `This completes the session permanently. ${skipped} remaining skipped patients will be marked NoShow.`, label: "Complete session", actionKey: "complete-session", run: () => doctorApi.completeSession(session.id) })}>Complete session</Button>}
 
@@ -488,7 +488,9 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
         <div>
 
-          <span className="eyebrow">{session.clinicName}</span>
+          <span className="eyebrow">Active session</span>
+
+          <span className="session-clinic">{session.clinicName}</span>
 
           <h1>Good to see you, {session.doctorName}.</h1>
 
@@ -500,7 +502,7 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
         </div>
 
-        <div className="session-state">
+        <div className="session-state" aria-label="Active session status and controls">
 
           <StatusBadge status={session.status} />
 

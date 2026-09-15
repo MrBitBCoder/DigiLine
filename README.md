@@ -50,7 +50,7 @@ The public UI displays its development verification code, so no SMS provider is 
 1. Run the API in Production with a SQL Server connection and a secret JWT signing key. Apply the migrations described in [operations](docs/operations.md).
 2. Open `/register`. Enter clinic name, unique clinic address (slug), clinic time zone, owner name, globally unique email, and password. Select **I also practice here** for Doctor access.
 3. Registration activates the clinic and signs its first administrator in immediately. There is no approval or email-activation step.
-4. In **Clinic administration**, configure clinic details and invite staff. Staff accept the single-use email link within 48 hours and set their password. Assign Admin, Doctor, and/or Receptionist roles; switch between permitted workspaces in the navigation.
+4. In **Clinic administration**, configure clinic details and use **Add staff** with name, email, roles, password, and confirmation. New accounts are active immediately and can sign in with the supplied password. Assign Admin, Doctor, and/or Receptionist roles; switch between permitted workspaces in the navigation.
 5. As a doctor, create and start a session. As reception, select it and add a walk-in. Call and complete the consultation from the doctor workspace.
 6. **Stop booking** permanently prevents new public and walk-in bookings. Finish the queue, then choose **Complete session** and confirm any remaining Skipped tokens as NoShow.
 

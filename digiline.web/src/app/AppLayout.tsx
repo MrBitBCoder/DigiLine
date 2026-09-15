@@ -1,10 +1,39 @@
 import { userRoles } from "../auth/authSession";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import "./app-layout.css";
 import { useAuth } from "../auth/AuthContext";
 
 export function AppLayout() {
   const { session, logout } = useAuth();
+  const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    let focusedHeading: HTMLElement | null = null;
+    let suppliedTabIndex = false;
+    const focusHeading = () => {
+      const heading = main.querySelector<HTMLElement>("h1");
+      if (!heading) return false;
+      suppliedTabIndex = heading.hasAttribute("tabindex");
+      if (!suppliedTabIndex) heading.tabIndex = -1;
+      heading.focus();
+      focusedHeading = heading;
+      return true;
+    };
+    let observer: MutationObserver | null = null;
+    if (!focusHeading()) observer = new MutationObserver(() => {
+      if (focusHeading()) observer?.disconnect();
+    });
+    observer?.observe(main, { childList: true, subtree: true });
+    return () => {
+      observer?.disconnect();
+      if (focusedHeading && !suppliedTabIndex) focusedHeading.removeAttribute("tabindex");
+    };
+  }, [location.pathname, location.search]);
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -24,6 +53,7 @@ export function AppLayout() {
                   isActive ? "nav-link active" : "nav-link"
                 }
                 to="/doctor"
+                end
               >
                 Doctor dashboard
               </NavLink>
@@ -53,7 +83,7 @@ export function AppLayout() {
           </div>
         </div>
       </header>
-      <main className="page">
+      <main className="page" ref={mainRef}>
         <Outlet />
       </main>
       <footer className="footer">

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { DoctorSessionSummary } from "../../shared/types/domain";
@@ -152,4 +152,82 @@ it("lists, edits, and deletes an unbooked future session", async () => {
   await user.click(screen.getByRole("button", { name: "Delete session" }));
   await waitFor(() => expect(api.deleteSession).toHaveBeenCalledWith("session-1"));
   await waitFor(() => expect(onDeleted).toHaveBeenCalled());
+});
+
+
+it.each(["Scheduled", "BookingOpen", "Running", "Paused", "Closed"] as const)("enables Edit/Delete for a token-free %s session with a past start", async status => {
+  const past = new Date(Date.now() - 3_600_000).toISOString();
+  api.listSessions.mockResolvedValue(paged([{ ...session, status, startTime: past }]));
+  render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
+  expect(await screen.findByRole("button", { name: "Edit" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
+});
+
+it.each(["Scheduled", "BookingOpen", "Running", "Paused", "Closed"] as const)("disables Edit/Delete when a %s session has any token, including finished tokens", async status => {
+  api.listSessions.mockResolvedValue(paged([{ ...session, status, queueSummary: { ...session.queueSummary, totalCount: 1, completedCount: 1 } }]));
+  render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
+  expect(await screen.findByRole("button", { name: "Edit" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+});
+
+it.each(["Running", "Paused"] as const)("edits a %s session without changing its exact historical start/open timestamps", async status => {
+  const started = { ...session, status, bookingOpenTime: new Date(Date.now() - 7_200_000).toISOString(), startTime: new Date(Date.now() - 3_600_000).toISOString().replace("Z", "1234Z") };
+  api.listSessions.mockResolvedValue(paged([started]));
+  api.updateSession.mockResolvedValue(undefined);
+  const user = userEvent.setup();
+  render(<SessionManager onSelect={vi.fn().mockResolvedValue(undefined)} onDeleted={vi.fn()} />);
+  await user.click(await screen.findByRole("button", { name: "Edit" }));
+  expect(screen.getByLabelText(/Start time/)).toBeDisabled();
+  expect(screen.getByLabelText(/Booking opens/)).toBeDisabled();
+  fireEvent.change(screen.getByLabelText(/Session name/), { target: { value: "Updated running clinic" } });
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(api.updateSession).toHaveBeenCalledWith(session.id, expect.objectContaining({ name: "Updated running clinic", startTime: started.startTime, bookingOpenTime: started.bookingOpenTime })));
+});
+
+
+it("refreshes an open session list after completion in another workspace", async () => {
+  render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
+  expect(await screen.findByText("Booking open")).toHaveClass("status-info");
+  api.listSessions.mockResolvedValue(paged([{ ...session, status: "Closed", isBookingOpen: false }]));
+  fireEvent.focus(window);
+  await waitFor(() => expect(screen.queryByText("Booking open")).not.toBeInTheDocument());
+  expect(screen.getAllByText("Completed").find(el => el.classList.contains("status-badge"))).toHaveClass("status-neutral");
+});
+
+it("polls the selected server page for lifecycle updates and cleans up on unmount", async () => {
+  vi.useFakeTimers();
+  try {
+    const view = render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    api.listSessions.mockResolvedValue(paged([{ ...session, status: "Closed", isBookingOpen: false }]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(screen.queryByText("Booking open")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Completed").find(el => el.classList.contains("status-badge"))).toHaveClass("status-neutral");
+    view.unmount(); const calls = api.listSessions.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(api.listSessions).toHaveBeenCalledTimes(calls);
+  } finally { vi.useRealTimers(); }
+});
+
+it.each([["Scheduled", "1"], ["BookingOpen", "2"], ["Running", "3"], ["Paused", "4"], ["Completed", "5"]])("filters %s with the explicit backend enum value %s", async (label, value) => {
+  render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
+  await screen.findByText("Morning session");
+  const select = screen.getByLabelText("Status");
+  expect(within(select).getByRole("option", { name: label })).toHaveValue(value);
+  fireEvent.change(select, { target: { value } });
+  await waitFor(() => expect(new URLSearchParams(api.listSessions.mock.calls.at(-1)?.[1]).get("status")).toBe(value));
+});
+
+
+it("discards an older BookingOpen response arriving after a Closed refresh", async () => {
+  render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
+  await screen.findByText("Morning session");
+  let resolveOld!: (value: ReturnType<typeof paged>) => void;
+  api.listSessions.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve; }))
+    .mockResolvedValue(paged([{ ...session, status: "Closed", isBookingOpen: false }]));
+  fireEvent.focus(window);
+  fireEvent.focus(window);
+  await waitFor(() => expect(screen.queryByText("Booking open")).not.toBeInTheDocument());
+  await act(async () => { resolveOld(paged([session])); });
+  expect(screen.queryByText("Booking open")).not.toBeInTheDocument();
 });

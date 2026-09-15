@@ -32,6 +32,19 @@ public sealed class ProductionWorkflowTests : IClassFixture<ProductionWorkflowTe
         await db.SaveChangesAsync();return(owner.ClinicId,owner.Id,session.Id);
     }
     [Fact]
+    public async Task DirectStaffCreationUsesExistingHasherAndSkipsInvitations()
+    {
+        var f=await Fixture();await using var db=database.Open();var mail=new Mail {Fail=true};
+        var staff=await Admin(db,mail).CreateAsync(f.Clinic,f.Owner,new("New staff",$"{Guid.NewGuid()}@example.test",[StaffRole.Admin,StaffRole.Doctor],Password),default);
+        var saved=await db.Staff.Include(x=>x.Roles).SingleAsync(x=>x.Id==staff.Id);
+        Assert.True(saved.IsActive);Assert.False(saved.InvitationPending);
+        Assert.NotEqual(Password,saved.PasswordHash);Assert.True(new PasswordHasher().Verify(Password,saved.PasswordHash));
+        Assert.Equal(new[]{StaffRole.Doctor,StaffRole.Admin},saved.Roles.Select(x=>x.Role).OrderBy(x=>x));
+        Assert.False(await db.StaffInvitations.AnyAsync(x=>x.StaffId==staff.Id));Assert.Equal("",mail.Token);
+        Assert.True(await db.AdministrationAudits.AnyAsync(x=>x.StaffId==staff.Id && x.Action=="Staff created"));
+        await Assert.ThrowsAsync<ArgumentException>(()=>Admin(db).CreateAsync(f.Clinic,f.Owner,new("Duplicate",saved.Email,[StaffRole.Receptionist],Password),default));
+    }
+    [Fact]
     public async Task InvitationExpiryResendRevocationAndDeliveryFailure()
     {
         var f=await Fixture();await using var db=database.Open();var mail=new Mail {Fail=true};var admin=Admin(db,mail);

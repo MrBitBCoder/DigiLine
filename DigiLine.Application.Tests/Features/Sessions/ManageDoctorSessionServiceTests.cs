@@ -1,5 +1,6 @@
 using DigiLine.Application.Sessions;
 using DigiLine.Domain.Entities;
+using DigiLine.Domain.Common;
 
 namespace DigiLine.Application.Tests;
 
@@ -62,6 +63,52 @@ public sealed class ManageDoctorSessionServiceTests
             new ManageDoctorSessionService(repository).DeleteAsync(session.ClinicId, Guid.NewGuid(), session.Id));
 
         Assert.False(repository.Deleted);
+    }
+
+    [Theory]
+    [InlineData(SessionStatus.BookingOpen)]
+    [InlineData(SessionStatus.Running)]
+    [InlineData(SessionStatus.Paused)]
+    public async Task ZeroTokens_AllowsUpdateAndDeleteIncludingPastStart(SessionStatus status)
+    {
+        var start = DateTime.UtcNow.AddHours(-1);
+        var session = new Session(Guid.NewGuid(), Guid.NewGuid(), "Original", start.AddHours(-1), start, start.AddHours(3), start.AddHours(3), 10);
+        session.OpenBooking();
+        if (status is SessionStatus.Running or SessionStatus.Paused) session.Start();
+        if (status == SessionStatus.Paused) session.Pause();
+        var opening = session.BookingOpenTime;
+        var repository = new StubRepository(session);
+        var service = new ManageDoctorSessionService(repository);
+        await service.UpdateAsync(session.ClinicId, session.DoctorId, session.Id,
+            new CreateDoctorSessionRequest("Updated", start, session.EndTime, 20));
+        Assert.Equal(status, session.Status);
+        Assert.Equal(opening, session.BookingOpenTime);
+        Assert.Equal("Updated", session.Name);
+        await service.DeleteAsync(session.ClinicId, session.DoctorId, session.Id);
+        Assert.True(repository.Deleted);
+        Assert.Equal(2, repository.SaveCount);
+    }
+
+    [Fact]
+    public async Task Delete_AllowsFutureSessionWithoutTokens()
+    {
+        var session = NewSession(Guid.NewGuid(), Guid.NewGuid());
+        var repository = new StubRepository(session);
+        await new ManageDoctorSessionService(repository).DeleteAsync(session.ClinicId, session.DoctorId, session.Id);
+        Assert.True(repository.Deleted);
+        Assert.Equal(1, repository.SaveCount);
+    }
+
+    [Fact]
+    public async Task Update_RejectsSessionWithTokenWithoutSaving()
+    {
+        var session = NewSession(Guid.NewGuid(), Guid.NewGuid());
+        session.QueueTokens.Add(new QueueToken(session.Id, 1, "Patient", null));
+        var repository = new StubRepository(session);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new ManageDoctorSessionService(repository).UpdateAsync(
+            session.ClinicId, session.DoctorId, session.Id, new CreateDoctorSessionRequest("Updated", session.StartTime, session.EndTime, 20)));
+        Assert.Equal(0, repository.SaveCount);
+        Assert.Equal("Original", session.Name);
     }
 
     private static Session NewSession(Guid clinic, Guid doctor)

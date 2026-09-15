@@ -17,7 +17,7 @@ public sealed class ManageDoctorSessionService(ISessionRepository sessions, Digi
         if (request.StartTime.Kind != DateTimeKind.Utc || request.EndTime.Kind != DateTimeKind.Utc ||
             (request.BookingOpenTime.HasValue && request.BookingOpenTime.Value.Kind != DateTimeKind.Utc))
             throw new InvalidOperationException("Session times must include an explicit UTC offset.");
-        session.Reschedule(request.Name, request.BookingOpenTime ?? DateTime.UtcNow,
+        session.Reschedule(request.Name, request.BookingOpenTime ?? session.BookingOpenTime,
             request.StartTime, request.EndTime, request.AverageConsultationMinutes);
         await sessions.SaveChangesAsync(cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);

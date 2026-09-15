@@ -109,12 +109,20 @@ namespace DigiLine.Domain.Entities
 
         public void Reschedule(string name, DateTime bookingOpenTime, DateTime startTime, DateTime endTime, int averageConsultationMinutes)
         {
-            if (Status is not (SessionStatus.Scheduled or SessionStatus.BookingOpen) || QueueTokens.Count != 0)
-                throw new InvalidOperationException("Only sessions without tokens that have not started can be edited.");
+            if (QueueTokens.Count != 0)
+                throw new InvalidOperationException("Sessions with assigned queue tokens cannot be edited.");
             if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200)
                 throw new InvalidOperationException("A session name of at most 200 characters is required.");
-            if (startTime <= DateTime.UtcNow || endTime <= startTime)
-                throw new InvalidOperationException("Choose a future start time and an end time after it.");
+            var hasStarted = Status is SessionStatus.Running or SessionStatus.Paused or SessionStatus.Closed;
+            if (hasStarted && (startTime != StartTime || bookingOpenTime != BookingOpenTime))
+                throw new InvalidOperationException("Booking open and start times cannot change after the session has started.");
+            if (!hasStarted && startTime != StartTime && startTime <= DateTime.UtcNow)
+                throw new InvalidOperationException("Choose a future start time when rescheduling.");
+            if (endTime <= startTime)
+                throw new InvalidOperationException("End time must be after start time.");
+            var lastBookingTime = LastBookingTime == EndTime ? endTime : LastBookingTime;
+            if (lastBookingTime > endTime)
+                throw new InvalidOperationException("End time cannot be before the existing booking cutoff.");
             if (bookingOpenTime >= startTime)
                 throw new InvalidOperationException("Booking open time must be before start time.");
             if (averageConsultationMinutes is < 1 or > 240)
@@ -123,15 +131,15 @@ namespace DigiLine.Domain.Entities
             BookingOpenTime = bookingOpenTime;
             StartTime = startTime;
             EndTime = endTime;
-            LastBookingTime = endTime;
+            LastBookingTime = lastBookingTime;
             UpdatedAt = DateTime.UtcNow;
             AverageConsultationMinutes = averageConsultationMinutes;
         }
 
         public void EnsureCanDelete()
         {
-            if (Status is not (SessionStatus.Scheduled or SessionStatus.BookingOpen) || QueueTokens.Count != 0)
-                throw new InvalidOperationException("Only sessions without tokens that have not started can be deleted.");
+            if (QueueTokens.Count != 0)
+                throw new InvalidOperationException("Sessions with assigned queue tokens cannot be deleted.");
         }
 
         public void Start()
@@ -166,7 +174,8 @@ namespace DigiLine.Domain.Entities
 
         public void StopBooking(DateTime now)
         {
-            if (Status == SessionStatus.Closed) throw new InvalidOperationException("This session is already completed.");
+            if (Status is not (SessionStatus.Running or SessionStatus.Paused))
+                throw new InvalidOperationException("Booking can only be stopped for a running or paused session. Start the session first.");
             BookingStoppedAt ??= now;
             UpdatedAt = now;
         }

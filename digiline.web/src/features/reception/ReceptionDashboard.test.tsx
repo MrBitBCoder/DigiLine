@@ -164,4 +164,16 @@ describe("ReceptionDashboard", () => {
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Patient arrived" }));
     await waitFor(() => expect(api.markLate).toHaveBeenCalledWith("session-1", "token-1"));
   });
+  it("shows Completed after the selected session closes and realtime refreshes", async () => {
+    const before = fixture(); before.sessions[0].session.status = "BookingOpen";
+    api.today.mockResolvedValue(before);
+    render(<ReceptionDashboard />);
+    await waitFor(() => expect(document.querySelector(".reception-session-strip .status-badge")).toHaveTextContent("Booking open"));
+    const after = fixture(); after.sessions[0].session.status = "Closed"; after.sessions[0].session.isBookingOpen = false;
+    api.today.mockResolvedValue(after);
+    await act(async () => { await realtime.callback?.(); });
+    await waitFor(() => expect(document.querySelector(".reception-session-strip .status-badge")).toHaveTextContent("Completed"));
+    expect(document.querySelector(".reception-session-strip .status-badge")).not.toHaveClass("status-info");
+  });
+
 });

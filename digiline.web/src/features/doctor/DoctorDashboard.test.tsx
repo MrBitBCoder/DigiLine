@@ -271,6 +271,40 @@ describe("DoctorDashboard", () => {
     expect(screen.getAllByText("#2")).toHaveLength(1);
     expect(api.getSession).toHaveBeenCalledTimes(2);
   });
+  it("replaces BookingOpen with Completed after an authoritative realtime refresh", async () => {
+    api.getActiveOrUpcoming.mockResolvedValue(fixture("BookingOpen", []));
+    api.getSession.mockResolvedValue(fixture("Closed", []));
+    render(<DoctorDashboard />);
+    await waitFor(() => expect(document.querySelector(".session-state .status-badge")).toHaveTextContent("Booking open"));
+    await act(async () => { await Promise.all([...realtime.callbacks].map(callback => callback())); });
+    await waitFor(() => expect(document.querySelector(".session-state .status-badge")).toHaveTextContent("Completed"));
+    expect(document.querySelector(".session-state .status-badge")).not.toHaveClass("status-info");
+    expect(document.querySelector(".session-state .status-badge")).not.toHaveTextContent("Booking open");
+  });
+  it("keeps Running lifecycle status when booking is stopped", async () => {
+    const stopped = fixture("Running", []); stopped.session.isBookingOpen = false;
+    api.getActiveOrUpcoming.mockResolvedValue(stopped);
+    render(<DoctorDashboard />);
+    expect(await screen.findByText("Running", { exact: true })).toHaveClass("status-success");
+    expect(document.querySelector(".session-state .status-badge")).not.toHaveTextContent("Completed");
+  });
+
+  it.each<[SessionStatus, boolean, boolean]>([
+    ["Scheduled", false, false], ["BookingOpen", false, false],
+    ["Running", false, true], ["Paused", false, true],
+    ["Running", true, false], ["Closed", false, false],
+  ])("Stop booking availability for %s with alreadyStopped=%s", async (status, stopped, available) => {
+    const data = fixture(status, []);
+    data.session.bookingHasStopped = stopped;
+    data.session.isBookingOpen = !stopped && status !== "Closed";
+    api.getActiveOrUpcoming.mockResolvedValue(data);
+    render(<DoctorDashboard />);
+    await screen.findByRole("heading", { name: "Patient queue" });
+    const button = screen.queryByRole("button", { name: "Stop booking" });
+    if (available) expect(button).toBeEnabled();
+    else expect(button).not.toBeInTheDocument();
+  });
+
 });
 
 async function actRealtimeEvent() {

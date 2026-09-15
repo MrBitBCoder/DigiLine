@@ -129,7 +129,7 @@ export function PublicClinicEntryPage() {
         />
       </PublicShell>
     );
-  const availableSessions = clinic.sessions.filter(session => session.isBookingOpen && ["BookingOpen", "Running", "Paused"].includes(session.status));
+  const visibleSessions = clinic.sessions.filter(session => session.status === "Running" || session.status === "Paused" || (session.status === "BookingOpen" && session.isBookingOpen));
   return (
     <PublicShell clinicName={clinic.name} compact>
       <div className="public-home-content">
@@ -142,19 +142,19 @@ export function PublicClinicEntryPage() {
       <section className="public-sessions" aria-labelledby="sessions-title">
         <div>
           <span className="eyebrow">Bookings available</span>
-          <h2 id="sessions-title">Open for booking</h2>
+          <h2 id="sessions-title">Live sessions and bookings</h2>
         </div>
-        {availableSessions.length === 0 ? (
+        {visibleSessions.length === 0 ? (
           <EmptyState
-            title="No sessions open for booking"
-            message="A session will appear here when its booking window opens. Please check back shortly."
+            title="No live sessions or open bookings"
+            message="A session will appear here when booking opens or the session starts. Please check back shortly."
           />
         ) : (
           <div className="session-list">
-            {availableSessions.map((session) => (
+            {visibleSessions.map((session) => (
               <Card key={session.id} className="public-session-card">
                 <div>
-                  <span className="public-live-label"><span aria-hidden="true" /> {session.status === "Paused" ? "Booking open · Doctor paused" : "Booking open"}</span>
+                  <span className="public-live-label"><span aria-hidden="true" /> {session.isBookingOpen ? "Booking open" : "Booking closed"}{session.status === "Paused" ? " · Doctor paused" : ""}</span>
                   <h3>{session.name}</h3>
                   <p>
                     {formatClinicTime(session.startTime, clinic.timeZoneId)} –{" "}
@@ -175,7 +175,7 @@ export function PublicClinicEntryPage() {
                     <dd>{session.approximateQueueSize}</dd>
                   </div>
                 </dl>
-                <Button onClick={() => setSelected(session)}>Join queue</Button>
+                <Button disabled={!session.isBookingOpen} onClick={() => setSelected(session)}>Join queue</Button>
               </Card>
             ))}
           </div>

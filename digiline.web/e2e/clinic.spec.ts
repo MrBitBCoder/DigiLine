@@ -55,6 +55,63 @@ test("reconnects after an extended offline period", async ({ page, context }) =>
   await context.setOffline(true); await page.waitForTimeout(22000); await context.setOffline(false);
   await expect(page.getByText("Live", { exact:true })).toBeVisible({ timeout:35000 });
 });
+test("doctor navigation exposes one current page and moves focus into routed content", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const payload = Buffer.from(JSON.stringify({
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    sub: "doctor-1",
+    email: "doctor@example.test",
+    name: "Dr Rao",
+    role: "Doctor",
+    clinic_id: "clinic-1",
+  })).toString("base64url");
+  await page.addInitScript((token) => {
+    sessionStorage.setItem("digiline.staff-session", JSON.stringify({ token }));
+  }, `header.${payload}.signature`);
+  const summary = {
+    id: "session-7", clinicId: "clinic-1", clinicName: "Clinic", doctorId: "doctor-1", doctorName: "Dr Rao",
+    name: "Morning session", bookingOpenTime: "2026-09-15T05:00:00Z", startTime: "2026-09-15T06:00:00Z",
+    endTime: "2026-09-15T10:00:00Z", lastBookingTime: "2026-09-15T09:00:00Z", averageConsultationMinutes: 10,
+    status: "Running", isBookingOpen: true, bookingHasStopped: false,
+    queueSummary: { currentToken: null, waitingCount: 0, lateCount: 0, totalCount: 0, completedCount: 0, notAttendedCount: 0, skippedCount: 0, unfinishedCount: 0 },
+    timeZoneId: "Asia/Kolkata",
+  };
+  await page.route("**/api/doctor/**", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/clinic-time-zone")) return route.fulfill({ json: { timeZoneId: "Asia/Kolkata" } });
+    if (url.pathname.endsWith("/active-upcoming") || url.pathname.endsWith("/sessions/session-7"))
+      return route.fulfill({ json: { session: summary, queue: [], page: 1, pageSize: 10, totalCount: 0 } });
+    return route.fulfill({ json: { items: [summary], page: 1, pageSize: 10, totalCount: 1 } });
+  });
+  await page.goto("/doctor/sessions");
+  const dashboardLink = page.getByRole("link", { name: "Doctor dashboard", exact: true });
+  const sessionsLink = page.getByRole("link", { name: "Sessions", exact: true });
+  await expect(sessionsLink).toHaveAttribute("aria-current", "page");
+  await expect(dashboardLink).not.toHaveAttribute("aria-current");
+  await expect(page.getByRole("heading", { name: "Sessions", exact: true })).toBeFocused();
+  await audit(page);
+
+  await page.getByRole("button", { name: "View queue" }).first().click();
+  await expect(page).toHaveURL(/\/doctor\?session=/);
+  await expect(dashboardLink).toHaveAttribute("aria-current", "page");
+  await expect(sessionsLink).not.toHaveAttribute("aria-current");
+  await expect(page.locator("main h1")).toBeFocused();
+  await audit(page);
+
+  const stopBooking = page.getByRole("button", { name: "Stop booking", exact: true });
+  await stopBooking.click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Go back" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(stopBooking).toBeFocused();
+
+  await sessionsLink.focus();
+  await page.keyboard.press("Enter");
+  await expect(sessionsLink).toHaveAttribute("aria-current", "page");
+  await expect(dashboardLink).not.toHaveAttribute("aria-current");
+  await expect(page.getByRole("heading", { name: "Sessions", exact: true })).toBeFocused();
+});
 test("layout remains usable at 200 percent zoom", async ({ page }) => {
   await page.setViewportSize({ width:768,height:900 }); await signIn(page);
   await page.evaluate(() => { document.documentElement.style.zoom = "2"; }); await audit(page);

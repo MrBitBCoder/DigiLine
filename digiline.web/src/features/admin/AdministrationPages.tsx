@@ -65,16 +65,19 @@ export function AdministrationPage() {
   return <div className="administration"><h1>Clinic administration</h1>{error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     {clinic && <Card><h2>Clinic details</h2><p><Link to={`/c/${clinic.slug}`}>Open public clinic page</Link></p><form key={`${clinic.name}:${clinic.timeZoneId}`} onSubmit={e => { e.preventDefault(); const data = Object.fromEntries(new FormData(e.currentTarget)); void run(() => request("/api/admin/clinic", { method: "PUT", body: data }), "Clinic details saved."); }}>
       <TextField label="Clinic name" name="name" defaultValue={clinic.name} required maxLength={200} /><TextField label="Time zone" name="timeZoneId" defaultValue={clinic.timeZoneId} required /><Button busy={busy}>Save clinic</Button></form></Card>}
-    <Card><h2>{editing ? `Edit ${editing.name}` : "Invite staff"}</h2><form key={editing?.id ?? "invite"} onSubmit={e => {
+    <Card><h2>{editing ? `Edit ${editing.name}` : "Add staff"}</h2><form key={editing?.id ?? "create"} onSubmit={e => {
       e.preventDefault(); const form = e.currentTarget; const data = new FormData(form); const selected = data.getAll("roles").map(String);
-      void run(async () => { const result = await request<Staff>(editing ? `/api/admin/staff/${editing.id}` : "/api/admin/staff", { method: editing ? "PUT" : "POST", body: { name: data.get("name"), email: data.get("email"), roles: selected.map(r => roles.indexOf(r as StaffRole) === 0 ? 3 : r === "Doctor" ? 1 : 2), isActive: data.has("isActive") } });
-        setEditing(null); form.reset(); if (result?.deliveryFailed) throw new Error("Invitation saved, but email delivery failed. Use Resend invitation to retry.");
-      }, editing ? "Staff updated. Changed access requires a new sign-in." : "Invitation sent.");
+      if (!editing && data.get("password") !== data.get("confirm")) { setError("Passwords do not match."); setNotice(""); return; }
+      void run(async () => { await request<Staff>(editing ? `/api/admin/staff/${editing.id}` : "/api/admin/staff", { method: editing ? "PUT" : "POST", body: { name: data.get("name"), email: data.get("email"), roles: selected.map(r => roles.indexOf(r as StaffRole) === 0 ? 3 : r === "Doctor" ? 1 : 2), ...(editing ? { isActive: data.has("isActive") } : { password: data.get("password") }) } });
+        setEditing(null); form.reset();
+      }, editing ? "Staff updated. Changed access requires a new sign-in." : "Staff account created. They can sign in immediately.");
     }}><TextField label="Staff name" name="name" defaultValue={editing?.name} required maxLength={200} />
     {!editing && <TextField label="Staff email" name="email" type="email" required />}
     <fieldset><legend>Roles</legend>{roles.map(role => <label className="check" key={role}><input type="checkbox" name="roles" value={role} defaultChecked={editing ? editing.roles.includes(role) : role === "Receptionist"} />{role}</label>)}</fieldset>
+    {!editing && <><TextField label="Password" name="password" type="password" required minLength={12} autoComplete="new-password" hint={passwordHelp} />
+    <TextField label="Confirm password" name="confirm" type="password" required autoComplete="new-password" /></>}
     {editing && <label className="check"><input type="checkbox" name="isActive" defaultChecked={editing.isActive} disabled={editing.invitationPending} />Active account</label>}
-    <Button busy={busy}>{editing ? "Save staff" : "Send invitation"}</Button>{editing && <Button type="button" variant="secondary" onClick={() => setEditing(null)}>Cancel edit</Button>}</form></Card>
+    <Button busy={busy}>{editing ? "Save staff" : "Create staff"}</Button>{editing && <Button type="button" variant="secondary" onClick={() => setEditing(null)}>Cancel edit</Button>}</form></Card>
     <Card><h2>Staff</h2>{staff && <DataTable caption="Clinic staff" rows={staff.items} getRowKey={s => s.id} page={page} totalCount={staff.totalCount} onPageChange={setPage} columns={[
       { key: "name", header: "Name", render: s => s.name }, { key: "email", header: "Email", render: s => s.email }, { key: "roles", header: "Roles", render: s => s.roles.join(", ") },
       { key: "status", header: "Status", render: s => s.invitationPending ? s.deliveryFailed ? "Invitation delivery failed" : "Invitation pending" : s.isActive ? "Active" : "Inactive" },

@@ -85,6 +85,23 @@ public sealed class AdministrationService(DigiLineDbContext db, IPasswordHasher 
             invitation.DeliveryFailed = true; await db.SaveChangesAsync(ct); return false;
         }
     }
+    public async Task<StaffView> CreateAsync(Guid clinicId, Guid actorId, CreateStaffRequest request, CancellationToken ct)
+    {
+        StaffPasswordService.ValidatePassword(request.Password);
+        var roles = Roles(request.Roles);
+        var staff = new Staff(clinicId, Name(request.Name), Email(request.Email), hasher.Hash(request.Password), roles[0]);
+        staff.UpdateAccess(staff.Name, roles, true);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await LockClinic(clinicId, ct);
+        if (await db.Staff.AnyAsync(x => x.NormalizedEmail == staff.NormalizedEmail, ct))
+            throw new ArgumentException("That email is already registered.");
+        db.Staff.Add(staff);
+        Audit(clinicId, actorId, staff.Id, "Staff created");
+        try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
+        catch (DbUpdateException e) when (e.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 2601 or 2627 })
+        { throw new ArgumentException("That email is already registered."); }
+        return new(staff.Id, staff.Name, staff.Email, staff.Roles.Select(x => x.Role).ToArray(), staff.IsActive, staff.InvitationPending, false);
+    }
     public async Task<StaffView> InviteAsync(Guid clinicId, Guid actorId, InviteStaffRequest request, CancellationToken ct)
     {
         var staff = new Staff(clinicId, Name(request.Name), Email(request.Email), "", StaffRole.Receptionist);
