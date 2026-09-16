@@ -71,10 +71,6 @@ public class QueueEventPublicationTests
             new StubQueueTokenRepository(next),
             new StubTransactionManager(), publisher).CallAsync(session.Id);
 
-        var recalled = new QueueToken(session.Id, 2, "Recall", null);
-        recalled.Call(DateTime.UtcNow);
-        await new RecallTokenService(new StubSessionRepository(session), new StubQueueTokenRepository(recalled), publisher).RecallAsync(session.Id, recalled.Id);
-
         var skipped = new QueueToken(session.Id, 3, "Skip", null);
         skipped.Call(DateTime.UtcNow);
         await new SkipTokenService(new StubSessionRepository(session), new StubQueueTokenRepository(skipped), publisher).SkipAsync(session.Id, skipped.Id);
@@ -92,8 +88,7 @@ public class QueueEventPublicationTests
 
         Assert.Equal(
             new[] {
-                QueueEventType.TokenCalled, QueueEventType.TokenRecalled,
-                QueueEventType.TokenSkipped, QueueEventType.TokenCompleted,
+                QueueEventType.TokenCalled, QueueEventType.TokenSkipped, QueueEventType.TokenCompleted,
                 QueueEventType.TokenCancelled, QueueEventType.TokenMarkedLate
             },
             publisher.Events.Select(queueEvent => queueEvent.Type));

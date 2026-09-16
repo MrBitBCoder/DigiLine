@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { request, getApiErrorMessage } from "../../api/httpClient";
 import { useAuth } from "../../auth/AuthContext";
-import { Button, Card, TextField, useToast } from "../../shared/ui";
+import { Button, Card, PageHeader, TextField, useToast } from "../../shared/ui";
+import "./login-page.css";
 
 export function ChangePasswordPage() {
   const toast = useToast();
@@ -24,14 +25,15 @@ export function ChangePasswordPage() {
     } catch (caught) { toast.error(getApiErrorMessage(caught)); }
     finally { setBusy(false); }
   }
-  return <Card><h1>Change password</h1><p>Use at least 12 characters with uppercase, lowercase, a number, and a symbol.</p>
+  return <section className="account-security"><PageHeader eyebrow="Account security" title="Change password" description="Use at least 12 characters with uppercase, lowercase, a number, and a symbol." />
+    <Card className="form-page-card">
     <form onSubmit={submit}>
       <TextField label="Current password" type="password" autoComplete="current-password" value={currentPassword} onChange={event => setCurrent(event.target.value)} required />
       <TextField label="New password" type="password" autoComplete="new-password" minLength={12} value={newPassword} onChange={event => setNext(event.target.value)} required />
       <TextField label="Confirm new password" type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirm(event.target.value)} required />
       {error && <p role="alert" className="form-error">{error}</p>}
       <Button type="submit" busy={busy}>Change password</Button>
-    </form></Card>;
+    </form></Card></section>;
 }
 
 export function ForgotPasswordPage() {
@@ -46,7 +48,7 @@ export function ForgotPasswordPage() {
     catch (caught) { toast.error(getApiErrorMessage(caught)); }
     finally { setBusy(false); }
   }
-  return <main className="login-page"><Card className="login-card"><h1>Forgot password</h1>
+  return <main className="auth-page auth-page-single"><Card className="auth-card"><span className="eyebrow">Account recovery</span><h1>Forgot password</h1><p>Enter your staff email to request a secure reset link.</p>
     {sent ? <p>If that email is registered, a reset link has been sent.</p> : <form onSubmit={submit}>
       <TextField label="Email address" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required />
       {error && <p role="alert" className="form-error">{error}</p>}
@@ -75,7 +77,7 @@ export function ResetPasswordPage() {
     catch (caught) { toast.error(getApiErrorMessage(caught)); }
     finally { setBusy(false); }
   }
-  return <main className="login-page"><Card className="login-card"><h1>Reset password</h1>
+  return <main className="auth-page auth-page-single"><Card className="auth-card"><span className="eyebrow">Account recovery</span><h1>Reset password</h1><p>Choose a new password for your staff account.</p>
     {!token ? <p role="alert">This reset link is invalid.</p> : done ? <p>Password changed. You can sign in now.</p> : <form onSubmit={submit}>
       <TextField label="New password" type="password" autoComplete="new-password" minLength={12} value={newPassword} onChange={event => setNext(event.target.value)} required />
       <TextField label="Confirm new password" type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirm(event.target.value)} required />

@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   book: vi.fn(),
   recover: vi.fn(),
   getToken: vi.fn(),
+  cancelToken: vi.fn(),
 }));
 const realtime = vi.hoisted(() => ({
   callbacks: new Set<() => void | Promise<void>>(),
@@ -127,10 +128,11 @@ describe("PublicClinicEntryPage", () => {
     api.getToken.mockResolvedValue(tokenState);
     const user = userEvent.setup();
     renderPage();
-    expect(await screen.findByText("Clinic time:")).toBeInTheDocument();
-    expect(screen.getByText("Booking starts:")).toBeInTheDocument();
-    expect(screen.getByText("Booking is currently open")).toBeInTheDocument();
+    expect(await screen.findByText("Clinic time")).toBeInTheDocument();
+    expect(screen.getByText("Booking starts")).toBeInTheDocument();
+    expect(screen.getByText("Booking open")).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Join queue" }));
+    expect(screen.getByRole("button", { name: "Close join queue" })).toHaveFocus();
     await user.type(screen.getByLabelText(/Phone number/), "9876543210");
     await user.click(
       screen.getByRole("button", { name: "Send verification code" }),
@@ -144,6 +146,7 @@ describe("PublicClinicEntryPage", () => {
     await user.click(
       screen.getByRole("button", { name: "Confirm and join queue" }),
     );
+    expect(await screen.findByRole("heading", { name: "You are in the queue" })).toBeInTheDocument();
     expect(await screen.findByText("#8")).toBeInTheDocument();
     expect(
       screen.getByText("Patients ahead").nextElementSibling,
@@ -170,6 +173,128 @@ describe("PublicClinicEntryPage", () => {
     expect(
       screen.getByText("Estimated wait").nextElementSibling,
     ).toHaveTextContent("—");
+  });
+
+  it("keeps the patient Called state and current-serving token visible", async () => {
+    storeToken();
+    api.getToken.mockResolvedValue({
+      ...tokenState,
+      status: "Called",
+      currentTokenNumber: 8,
+      position: null,
+      patientsAhead: null,
+      estimatedWaitMinutes: null,
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Doctor is calling you now" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Your token #8")).toHaveTextContent("Called");
+    expect(screen.getByText("Now serving").nextElementSibling).toHaveTextContent("#8");
+  });
+
+  it.each([
+    ["Waiting", "You are in the queue", "Waiting"],
+    ["Called", "Doctor is calling you now", "Called"],
+    ["InConsultation", "Consultation in progress", "In consultation"],
+    ["Completed", "Consultation completed", "Completed"],
+  ] as const)("presents the %s lifecycle state and progress clearly", async (status, heading, step) => {
+    storeToken();
+    api.getToken.mockResolvedValue({ ...tokenState, status });
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+    expect(screen.getByLabelText("Your token #8")).toBeInTheDocument();
+    const progress = screen.getByRole("navigation", { name: "Token progress" });
+    expect(within(progress).getByText(step).closest("li")).toHaveAttribute("aria-current", "step");
+  });
+
+  it("restores focus when the patient closes the join flow", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const join = await screen.findByRole("button", { name: "Join queue" });
+    await user.click(join);
+    await user.click(screen.getByRole("button", { name: "Close join queue" }));
+    expect(join).toHaveFocus();
+  });
+
+  it.each(["Waiting", "Late", "Skipped"] as const)(
+    "allows a patient to cancel a %s token with safe initial focus",
+    async status => {
+      storeToken();
+      api.getToken.mockResolvedValue({ ...tokenState, status });
+      api.cancelToken.mockResolvedValue({
+        ...tokenState,
+        status: "Cancelled",
+        position: null,
+        patientsAhead: null,
+        estimatedWaitMinutes: null,
+      });
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.click(await screen.findByRole("button", { name: "Cancel token" }));
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByRole("heading", { name: "Cancel your token?" })).toBeInTheDocument();
+      expect(screen.getByText("You will leave the queue and token #8 will no longer be called.")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Keep my token" })).toHaveFocus();
+      await user.click(within(dialog).getByRole("button", { name: "Cancel token" }));
+
+      expect(api.cancelToken).toHaveBeenCalledWith("patient-access", "session-1", "token-1");
+      expect(await screen.findByText("You left the queue. Token #8 will no longer be called.")).toBeInTheDocument();
+      expect(screen.getByText("Token #8 was cancelled.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cancel token" })).not.toBeInTheDocument();
+      expect(sessionStorage.getItem("digiline.active-token")).toContain("token-1");
+    },
+  );
+
+  it.each(["Called", "InConsultation", "Completed", "Cancelled", "NoShow"] as const)(
+    "does not offer patient cancellation for a %s token",
+    async status => {
+      storeToken();
+      api.getToken.mockResolvedValue({ ...tokenState, status });
+      renderPage();
+
+      expect(await screen.findByText("#8")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cancel token" })).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps the token and permits retry after cancellation fails", async () => {
+    storeToken();
+    api.getToken.mockResolvedValue(tokenState);
+    api.cancelToken.mockRejectedValue(new ApiError("This token can no longer be cancelled.", 409, {
+      detail: "This token can no longer be cancelled.",
+    }));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Cancel token" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel token" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("This token can no longer be cancelled.");
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel token" })).toBeEnabled();
+    expect(screen.queryByText(/was cancelled/)).not.toBeInTheDocument();
+    expect(sessionStorage.getItem("digiline.active-token")).toContain("token-1");
+  });
+
+  it("restores a cancelled token as history without offering recovery or cancellation", async () => {
+    storeToken();
+    api.getToken.mockResolvedValue({
+      ...tokenState,
+      status: "Cancelled",
+      position: null,
+      patientsAhead: null,
+      estimatedWaitMinutes: null,
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("You left the queue. Token #8 will no longer be called.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Token cancelled" })).toBeInTheDocument();
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel token" })).not.toBeInTheDocument();
+    expect(api.recover).not.toHaveBeenCalled();
   });
 
   it("keeps an issued token visible after booking closes", async () => {
@@ -209,8 +334,8 @@ describe("PublicClinicEntryPage", () => {
     renderPage();
     expect(await screen.findByText("Morning session")).toBeInTheDocument();
     expect(screen.getByText("#4")).toBeInTheDocument();
-    expect(screen.getByText(/Booking has closed for this session/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Join queue" })).toBeDisabled();
+    expect(screen.getByText(/Booking closed/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Join queue" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Find my token" })).toBeEnabled();
   });
 
@@ -229,7 +354,9 @@ describe("PublicClinicEntryPage", () => {
     await user.type(await screen.findByLabelText(/6-digit code/), "123456");
     await user.click(screen.getByRole("button", { name: "Verify" }));
     await user.click(await screen.findByRole("button", { name: /Asha/ }));
-    expect(await screen.findByText("#8")).toBeInTheDocument();
+    const ownToken = await screen.findByLabelText("Your token #8");
+    expect(ownToken).toBeInTheDocument();
+    expect(ownToken.compareDocumentPosition(screen.getByText("Now serving")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText("Now serving").nextElementSibling).toHaveTextContent("#4");
     expect(api.recover).toHaveBeenCalledWith("recovered-access", "session-1", "profile-1");
     expect(api.book).not.toHaveBeenCalled(); expect(api.createProfile).not.toHaveBeenCalled();
@@ -268,7 +395,8 @@ describe("PublicClinicEntryPage", () => {
     expect(screen.getAllByRole("button", { name: "Join queue" })).toHaveLength(3);
     expect(screen.getByText("Pre-start session")).toBeInTheDocument();
     expect(screen.getByText("Paused session")).toBeInTheDocument();
-    expect(screen.getByText("Booking is currently open · Doctor paused")).toBeInTheDocument();
+    expect(screen.getByText("Paused")).toBeInTheDocument();
+    expect(screen.getAllByText("Booking open")).toHaveLength(3);
     expect(screen.queryByText("Scheduled")).not.toBeInTheDocument();
     expect(screen.queryByText("Closed")).not.toBeInTheDocument();
   });
@@ -290,8 +418,8 @@ describe("PublicClinicEntryPage", () => {
     renderPage();
 
     expect(await screen.findByText(/Booking opens at 9:00 (?:AM|a\.m\.)/i)).toBeInTheDocument();
-    expect(screen.getByText("Booking starts:").parentElement).toHaveTextContent(/9:00 (?:AM|a\.m\.)/i);
-    expect(screen.getByText("Clinic time:").parentElement).toHaveTextContent(/10:00 (?:AM|a\.m\.) – 1:00 (?:PM|p\.m\.)/i);
+    expect(screen.getByText("Booking starts").parentElement).toHaveTextContent(/9:00 (?:AM|a\.m\.)/i);
+    expect(screen.getByText("Clinic time").parentElement).toHaveTextContent(/10:00 (?:AM|a\.m\.) – 1:00 (?:PM|p\.m\.)/i);
     expect(screen.getByRole("button", { name: "Join queue" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Find my token" })).not.toBeInTheDocument();
   });
@@ -299,7 +427,7 @@ describe("PublicClinicEntryPage", () => {
   it("refreshes patient timing after the doctor edits the session", async () => {
     api.getBySlug.mockResolvedValue({ ...clinic, timeZoneId: "UTC" });
     renderPage();
-    expect(await screen.findByText("Clinic time:")).toBeInTheDocument();
+    expect(await screen.findByText("Clinic time")).toBeInTheDocument();
 
     api.getBySlug.mockResolvedValue({
       ...clinic,
@@ -313,8 +441,8 @@ describe("PublicClinicEntryPage", () => {
     });
     await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
 
-    expect(screen.getByText("Booking starts:").parentElement).toHaveTextContent(/5:30 (?:AM|a\.m\.)/i);
-    expect(screen.getByText("Clinic time:").parentElement).toHaveTextContent(/7:00 (?:AM|a\.m\.) – 11:00 (?:AM|a\.m\.)/i);
+    expect(screen.getByText("Booking starts").parentElement).toHaveTextContent(/5:30 (?:AM|a\.m\.)/i);
+    expect(screen.getByText("Clinic time").parentElement).toHaveTextContent(/7:00 (?:AM|a\.m\.) – 11:00 (?:AM|a\.m\.)/i);
   });
 
   it.each(["Running", "Paused"] as const)("restores and refreshes an existing token after booking stops in %s", async sessionStatus => {
@@ -337,9 +465,9 @@ describe("PublicClinicEntryPage", () => {
     expect(screen.getByLabelText(/Phone number/)).toBeInTheDocument();
     api.getBySlug.mockResolvedValue({ ...clinic, sessions: [{ ...clinic.sessions[0], isBookingOpen: false }] });
     await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
-    expect(await screen.findByText("Booking has closed for this session")).toBeInTheDocument();
+    expect(await screen.findByText("Booking closed")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Phone number/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Join queue" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Join queue" })).not.toBeInTheDocument();
     expect(api.book).not.toHaveBeenCalled();
   });
 
@@ -356,11 +484,11 @@ describe("PublicClinicEntryPage", () => {
   });
   it("removes a completed session from the public listing after refresh", async () => {
     renderPage();
-    expect(await screen.findByText("Booking is currently open")).toBeInTheDocument();
+    expect(await screen.findByText("Booking open")).toBeInTheDocument();
     api.getBySlug.mockResolvedValue({ ...clinic, sessions: [] });
     await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
     expect(await screen.findByText("No live sessions or open bookings")).toBeInTheDocument();
-    expect(screen.queryByText("Booking is currently open")).not.toBeInTheDocument();
+    expect(screen.queryByText("Booking open")).not.toBeInTheDocument();
   });
 
 });

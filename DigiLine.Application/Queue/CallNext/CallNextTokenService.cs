@@ -44,6 +44,9 @@ public sealed class CallNextTokenService : ICallNextTokenService
                 "Call Next is only available for a running session.");
         }
 
+        if (await _queueTokenRepository.GetCurrentForUpdateAsync(sessionId, cancellationToken) is not null)
+            throw new InvalidOperationException(
+                "Complete or skip the current patient before calling next.");
 
         var token = await _queueTokenRepository.GetNextWaitingForUpdateAsync(
             sessionId,

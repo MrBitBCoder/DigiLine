@@ -4,7 +4,6 @@ public enum QueueEventType
 {
     TokenBooked = 1,
     TokenCalled = 2,
-    TokenRecalled = 3,
     TokenSkipped = 4,
     TokenCompleted = 5,
     TokenCancelled = 6,
@@ -14,5 +13,6 @@ public enum QueueEventType
     WalkInCreated = 10,
     BookingStopped = 11,
     SessionCompleted = 12,
-    SessionStarted = 13
+    SessionStarted = 13,
+    TokenCompletedAndNextCalled = 14
 }

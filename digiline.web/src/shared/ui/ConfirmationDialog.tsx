@@ -7,6 +7,7 @@ interface ConfirmationDialogProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   destructive?: boolean;
   busy?: boolean;
   onConfirm: () => void;
@@ -17,6 +18,7 @@ export function ConfirmationDialog({
   title,
   message,
   confirmLabel = "Confirm",
+  cancelLabel = "Go back",
   destructive = false,
   busy = false,
   onConfirm,
@@ -25,10 +27,14 @@ export function ConfirmationDialog({
   const titleId = useId();
   const messageId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      cancelRef.current?.focus();
+    }
     else if (!open && dialog.open) dialog.close();
   }, [open]);
   return (
@@ -52,12 +58,13 @@ export function ConfirmationDialog({
       <p id={messageId}>{message}</p>
       <div className="dialog-actions">
         <Button
+          ref={cancelRef}
           variant="secondary"
           onClick={onCancel}
           disabled={busy}
           autoFocus
         >
-          Go back
+          {cancelLabel}
         </Button>
         <Button
           variant={destructive ? "danger" : "primary"}

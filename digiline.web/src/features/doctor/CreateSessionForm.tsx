@@ -65,17 +65,17 @@ export function CreateSessionForm({ onSaved, session, onCancel, timeZoneId = def
     }
   }
 
-  return <Card className="create-session-card">
-    <div><span className="eyebrow">Plan ahead</span><h2>{session ? "Edit session" : "Create session"}</h2><p>{session ? "Sessions can be changed while no queue tokens have been assigned." : "Leave booking-open time blank to open booking now."} {hasStarted && "Booking-open and start times are fixed because this session has started."} Times are in {timeZoneId}.</p></div>
-    <form onSubmit={submit} className="create-session-form">
+  return <Card padding="compact" className="create-session-card">
+    <div className="session-form-intro"><div><span className="eyebrow">{session ? "Session details" : "Plan ahead"}</span><h2>{session ? "Edit session" : "Create session"}</h2></div><p>{session ? "Sessions can be changed while no queue tokens have been assigned." : "Leave booking-open time blank to open booking now."} {hasStarted && "Booking-open and start times are fixed because this session has started."} Times are in {timeZoneId}.</p></div>
+    <form onSubmit={submit} className="form-grid create-session-form">
       <TextField label="Session name" value={name} onChange={event => setName(event.target.value)} required maxLength={120} />
       <TextField label="Booking opens (optional)" type="datetime-local" disabled={hasStarted} value={bookingOpenTime} onChange={event => setBookingOpenTime(event.target.value)} />
       <TextField label="Start time" type="datetime-local" disabled={hasStarted} value={startTime} onChange={event => setStartTime(event.target.value)} required />
       <TextField label="End time" type="datetime-local" value={endTime} onChange={event => setEndTime(event.target.value)} required />
       <TextField label="Average visit (minutes)" type="number" min={1} max={240} value={averageMinutes} onChange={event => setAverageMinutes(Number(event.target.value))} required />
       {error && <p role="alert" className="form-error">{error}</p>}
-      <Button type="submit" busy={busy} disabled={busy}>{session ? "Save changes" : "Create session"}</Button>
-      {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>}
+      <div className="form-actions"><Button type="submit" busy={busy} disabled={busy}>{session ? "Save changes" : "Create session"}</Button>
+      {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>}</div>
     </form>
   </Card>;
 }

@@ -9,3 +9,19 @@ it.each([[1,"Scheduled"], [2,"BookingOpen"], [3,"Running"], [4,"Paused"], [5,"Cl
   expect(result.items[0].status).toBe(expected);
   expect(result.items[0].isBookingOpen).toBe(false);
 });
+
+it("uses the explicit complete-and-call-next endpoint and normalizes both tokens", async () => {
+  api.request.mockResolvedValue({
+    completedToken: { id: "one", status: 4, tokenNumber: 1 },
+    calledToken: { id: "two", status: 2, tokenNumber: 2 },
+  });
+
+  const result = await doctorApi.completeAndCallNext("session-1", "one");
+
+  expect(api.request).toHaveBeenCalledWith(
+    "/api/doctor/sessions/session-1/tokens/one/complete-and-call-next",
+    { method: "POST" },
+  );
+  expect(result.completedToken.status).toBe("Completed");
+  expect(result.calledToken?.status).toBe("Called");
+});

@@ -54,6 +54,24 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
                 .SingleOrDefaultAsync(cancellationToken);
         }
 
+        public async Task<QueueToken?> GetCurrentForUpdateAsync(
+            Guid sessionId,
+            CancellationToken cancellationToken = default)
+        {
+            if (_dbContext.Database.CurrentTransaction is null)
+                throw new InvalidOperationException("Selecting the current token requires an active transaction.");
+
+            return await _dbContext.QueueTokens
+                .FromSqlInterpolated($"""
+                    SELECT TOP (1) *
+                    FROM QueueTokens WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
+                    WHERE SessionId = {sessionId}
+                      AND Status IN ({QueueTokenStatus.Called}, {QueueTokenStatus.InConsultation})
+                    ORDER BY CalledAt DESC, QueueOrder, TokenNumber
+                    """)
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+
         public async Task<QueueToken?> GetByIdAsync(
             Guid sessionId,
             Guid tokenId,
@@ -72,7 +90,7 @@ namespace DigiLine.Infrastructure.Persistence.Repositories
             CancellationToken cancellationToken = default)
         {
             if (_dbContext.Database.CurrentTransaction is null)
-                throw new InvalidOperationException("Late arrival requires an active transaction.");
+                throw new InvalidOperationException("Selecting a queue token for update requires an active transaction.");
             return _dbContext.QueueTokens.FromSqlInterpolated($"""
                 SELECT * FROM QueueTokens WITH (UPDLOCK, HOLDLOCK)
                 WHERE SessionId = {sessionId} AND Id = {tokenId}

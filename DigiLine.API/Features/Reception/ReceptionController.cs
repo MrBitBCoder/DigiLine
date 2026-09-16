@@ -18,13 +18,12 @@ public sealed class ReceptionController : ControllerBase
     private readonly ICreateWalkInTokenService _walkIns;
     private readonly ICancelTokenService _cancel;
     private readonly IMarkTokenLateService _late;
-    private readonly IRecallTokenService _recall;
 
     public ReceptionController(IGetReceptionDashboardService dashboard,
         ICreateWalkInTokenService walkIns, ICancelTokenService cancel,
-        IMarkTokenLateService late, IRecallTokenService recall, IStaffSessionQueries? paged = null, DigiLine.Application.Clinics.IClinicTimeZoneResolver? zones = null)
+        IMarkTokenLateService late, IStaffSessionQueries? paged = null, DigiLine.Application.Clinics.IClinicTimeZoneResolver? zones = null)
     {
-        _paged = paged; _zones = zones; _dashboard = dashboard; _walkIns = walkIns; _cancel = cancel; _late = late; _recall = recall;
+        _paged = paged; _zones = zones; _dashboard = dashboard; _walkIns = walkIns; _cancel = cancel; _late = late;
     }
 
     [HttpGet("sessions/today")]
@@ -65,10 +64,6 @@ public sealed class ReceptionController : ControllerBase
     [HttpPost("sessions/{sessionId:guid}/tokens/{tokenId:guid}/late")]
     public Task<IActionResult> Late(Guid sessionId, Guid tokenId, CancellationToken cancellationToken) =>
         Mutate(sessionId, tokenId, (s, t) => _late.MarkLateAsync(s, t, cancellationToken), cancellationToken);
-
-    [HttpPost("sessions/{sessionId:guid}/tokens/{tokenId:guid}/recall")]
-    public Task<IActionResult> Recall(Guid sessionId, Guid tokenId, CancellationToken cancellationToken) =>
-        Mutate(sessionId, tokenId, (s, t) => _recall.RecallAsync(s, t, cancellationToken), cancellationToken);
 
     private async Task<IActionResult> Mutate(Guid sessionId, Guid tokenId,
         Func<Guid, Guid, Task<QueueTokenListItem>> action, CancellationToken cancellationToken)

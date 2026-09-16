@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -55,6 +55,35 @@ function doctorNavigation() {
 }
 
 describe("doctor navigation", () => {
+  it("exposes a controlled menu and restores focus when Escape closes it", async () => {
+    const user = userEvent.setup();
+    renderAt("/doctor");
+    const menu = screen.getByRole("button", { name: "Menu" });
+
+    expect(menu).toHaveAttribute("aria-expanded", "false");
+    expect(menu).toHaveAttribute("aria-controls");
+    await user.click(menu);
+    expect(screen.getByRole("button", { name: "Close menu" })).toHaveAttribute("aria-expanded", "true");
+
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.pointerDown(document.body);
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("closes the menu after navigation while preserving destination heading focus", async () => {
+    const user = userEvent.setup();
+    renderAt("/doctor");
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+    await user.click(doctorNavigation().sessions);
+
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Sessions page" })).toHaveFocus());
+  });
+
   it("marks only Doctor Dashboard current, including with a selected-session query", async () => {
     renderAt("/doctor?session=session-7");
     const nav = doctorNavigation();

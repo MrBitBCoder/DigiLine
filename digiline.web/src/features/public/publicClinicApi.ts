@@ -105,4 +105,25 @@ export const publicClinicApi = {
           : state.sessionStatus,
     };
   },
+  cancelToken: async (
+    accessToken: string,
+    sessionId: string,
+    tokenId: string,
+  ) => {
+    const state = await request<PublicTokenState>(
+      `/api/public/queue/sessions/${sessionId}/tokens/${tokenId}/cancel`,
+      { method: "POST", headers: patientHeaders(accessToken) },
+    );
+    return {
+      ...state,
+      status:
+        typeof state.status === "number"
+          ? tokenStatuses[state.status]
+          : state.status,
+      sessionStatus:
+        typeof state.sessionStatus === "number"
+          ? sessionStatuses[state.sessionStatus]
+          : state.sessionStatus,
+    };
+  },
 };

@@ -15,6 +15,7 @@ public class CallNextTokenServiceTests
         var session = CreateRunningSession();
         var alreadyCalled = new QueueToken(session.Id, 1, "Already called", null);
         alreadyCalled.Call(DateTime.UtcNow.AddMinutes(-1));
+        alreadyCalled.Complete(DateTime.UtcNow);
         var second = new QueueToken(session.Id, 2, "Second", null);
         var third = new QueueToken(session.Id, 3, Guid.NewGuid());
         var fixture = new Fixture(session, third, alreadyCalled, second);
@@ -29,6 +30,24 @@ public class CallNextTokenServiceTests
         Assert.NotNull(second.CalledAt);
         Assert.Equal(QueueTokenStatus.Waiting, third.Status);
         Assert.True(fixture.Transactions.Transactions.Single().Committed);
+    }
+
+    [Fact]
+    public async Task CallAsync_WithCurrentPatient_RejectsWithoutCompletingCurrent()
+    {
+        var session = CreateRunningSession();
+        var current = new QueueToken(session.Id, 1, "Current", null);
+        current.Call(DateTime.UtcNow);
+        var waiting = new QueueToken(session.Id, 2, "Waiting", null);
+        var fixture = new Fixture(session, current, waiting);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Service.CallAsync(session.Id));
+
+        Assert.Equal("Complete or skip the current patient before calling next.", exception.Message);
+        Assert.Equal(QueueTokenStatus.Called, current.Status);
+        Assert.Equal(QueueTokenStatus.Waiting, waiting.Status);
+        Assert.False(fixture.Transactions.Transactions.Single().Committed);
     }
 
     [Fact]
@@ -123,7 +142,7 @@ public class CallNextTokenServiceTests
     }
 
     [Fact]
-    public async Task CallAsync_WhenCalledConcurrently_CallsEachTokenOnceInOrder()
+    public async Task CallAsync_WhenCalledConcurrently_CallsOnlyOneCurrentToken()
     {
         const int count = 10;
         var session = CreateRunningSession();
@@ -138,14 +157,16 @@ public class CallNextTokenServiceTests
 
         var results = await Task.WhenAll(
             Enumerable.Range(0, count)
-                .Select(_ => fixture.Service.CallAsync(session.Id)));
+                .Select(async _ =>
+                {
+                    try { return await fixture.Service.CallAsync(session.Id); }
+                    catch (InvalidOperationException) { return null; }
+                }));
 
-        Assert.Equal(
-            Enumerable.Range(1, count),
-            results.Select(result => result.TokenNumber).OrderBy(number => number));
-        Assert.Equal(count, results.Select(result => result.Id).Distinct().Count());
-        Assert.All(tokens, token =>
-            Assert.Equal(QueueTokenStatus.Called, token.Status));
+        var called = Assert.Single(results, result => result is not null)!;
+        Assert.Equal(1, called.TokenNumber);
+        Assert.Single(tokens, token => token.Status == QueueTokenStatus.Called);
+        Assert.Equal(count - 1, tokens.Count(token => token.Status == QueueTokenStatus.Waiting));
     }
 
     [Fact]
@@ -245,10 +266,11 @@ public class CallNextTokenServiceTests
         newcomer.AssignQueueOrder(5);
         var fixture = new Fixture(session, newcomer, returned, second, first);
 
-        Assert.Equal(first.Id, (await fixture.Service.CallAsync(session.Id)).Id);
-        Assert.Equal(second.Id, (await fixture.Service.CallAsync(session.Id)).Id);
-        Assert.Equal(returned.Id, (await fixture.Service.CallAsync(session.Id)).Id);
-        Assert.Equal(newcomer.Id, (await fixture.Service.CallAsync(session.Id)).Id);
+        foreach (var expected in new[] { first, second, returned, newcomer })
+        {
+            Assert.Equal(expected.Id, (await fixture.Service.CallAsync(session.Id)).Id);
+            expected.Complete(DateTime.UtcNow);
+        }
     }
 
     private static QueueToken CreateLateToken(Guid sessionId, int tokenNumber)
@@ -353,6 +375,12 @@ public class CallNextTokenServiceTests
                     .OrderBy(token => token.QueueOrder)
                     .ThenBy(token => token.TokenNumber)
                     .FirstOrDefault());
+
+        public Task<QueueToken?> GetCurrentForUpdateAsync(
+            Guid sessionId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(_tokens.SingleOrDefault(token => token.SessionId == sessionId
+                && (token.Status is QueueTokenStatus.Called or QueueTokenStatus.InConsultation)));
 
         public Task<QueueToken?> GetByIdAsync(
             Guid sessionId,

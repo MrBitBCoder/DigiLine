@@ -1,83 +1,274 @@
-.reception-session-strip {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
+.reception-dashboard {
+  gap: var(--space-4);
+}
+
+.reception-session-toolbar {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--color-surface);
 }
-.reception-session-strip div {
+
+.reception-session-controls {
+  display: flex;
+  align-items: end;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.reception-session-controls .field {
+  flex: 1 1 28rem;
+  min-width: 14rem;
+}
+
+.reception-session-controls nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.reception-overview {
   display: grid;
-  margin-right: auto;
+  grid-template-columns: minmax(0, 2.2fr) minmax(14rem, 0.8fr);
+  gap: var(--space-3);
+  min-width: 0;
 }
-.reception-session-strip div > span {
+
+.reception-active-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, auto);
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  border-left: 0.3rem solid var(--color-primary);
+}
+
+.reception-session-copy h2 {
+  margin: var(--space-1) 0;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+}
+
+.reception-session-copy p {
+  margin: 0;
   color: var(--color-muted);
-  font-size: 0.88rem;
 }
+
+.reception-session-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.reception-current-token {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--color-border);
+}
+
+.reception-current-token strong {
+  margin: var(--space-1) 0;
+  color: var(--color-primary-dark);
+  font: 750 clamp(2.35rem, 5vw, 3.5rem)/1 var(--font-display);
+  letter-spacing: -0.045em;
+}
+
+.reception-current-token small {
+  color: var(--color-muted);
+}
+
+.reception-queue-summary {
+  display: grid;
+  grid-template-columns: 1fr;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.reception-queue-summary > div {
+  display: grid;
+  align-content: center;
+  padding: 0.6rem var(--space-3);
+}
+
+.reception-queue-summary > div + div {
+  border-top: 1px solid var(--color-border);
+}
+
+.reception-queue-summary dt,
+.reception-queue-summary .summary-detail {
+  color: var(--color-muted);
+}
+
+.reception-queue-summary dt {
+  font-size: var(--text-xs);
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reception-queue-summary dd {
+  margin: var(--space-1) 0;
+  font: 750 1.4rem/1 var(--font-display);
+}
+
+.reception-queue-summary .summary-detail {
+  margin: 0;
+  font: inherit;
+}
+
 .walk-in-card {
   display: grid;
-  grid-template-columns: minmax(12rem, 0.7fr) minmax(24rem, 1.3fr);
-  gap: var(--space-6);
+  grid-template-columns: minmax(12rem, 0.6fr) minmax(28rem, 1.4fr);
+  gap: var(--space-5);
   align-items: end;
 }
+
 .walk-in-card h2 {
-  margin: 0.2rem 0;
+  margin: var(--space-1) 0;
 }
+
 .walk-in-card p {
-  color: var(--color-muted);
   margin: 0;
+  color: var(--color-muted);
 }
+
 .walk-in-card form {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: minmax(10rem, 1fr) minmax(9rem, 1fr) minmax(5rem, 0.45fr) auto;
   gap: var(--space-3);
   align-items: end;
 }
+
 .booking-warning {
   grid-column: 2;
   color: var(--color-danger);
 }
+
 .patient-phone {
   display: block;
   color: var(--color-muted);
 }
+
 .row-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.25rem;
+  gap: var(--space-1);
 }
+
 .token-confirmation {
   position: fixed;
   inset: 0;
   z-index: 20;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: var(--space-4);
   background: rgb(10 24 20 / 0.55);
 }
+
 .token-confirmation .ds-card {
   min-width: min(24rem, 100%);
   text-align: center;
 }
+
 .token-confirmation strong {
   display: block;
-  margin: 1rem;
-  font: 750 2.5rem var(--font-display);
+  margin: var(--space-4);
   color: var(--color-primary);
+  font: 750 2.5rem var(--font-display);
 }
-@media (max-width: 800px) {
+
+@media (max-width: 900px) {
+  .reception-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .reception-queue-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .reception-queue-summary > div + div {
+    border-top: 0;
+    border-left: 1px solid var(--color-border);
+  }
+
   .walk-in-card {
     grid-template-columns: 1fr;
   }
-  .walk-in-card form {
-    grid-template-columns: 1fr;
+}
+
+@media (max-width: 800px) {
+  .reception-session-controls {
+    align-items: stretch;
+    flex-direction: column;
   }
+
+  .reception-session-controls .field {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .reception-session-controls nav {
+    flex-wrap: wrap;
+  }
+
+  .walk-in-card form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .walk-in-card form .ds-button {
+    width: 100%;
+  }
+
   .booking-warning {
     grid-column: auto;
   }
-  .reception-session-strip {
-    align-items: flex-start;
-    flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .reception-active-panel {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .reception-current-token {
+    padding: var(--space-3) 0 0;
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+  }
+
+  .reception-dashboard .data-table td[data-column-key="age"],
+  .reception-dashboard .data-table td[data-column-key="phone"],
+  .reception-dashboard .data-table td[data-column-key="source"],
+  .reception-dashboard .data-table td[data-column-key="called"],
+  .reception-dashboard .data-table td[data-column-key="late-arrival"],
+  .reception-dashboard .data-table td[data-column-key="completed"] {
+    display: none;
+  }
+
+  .walk-in-card form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .reception-queue-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reception-queue-summary > div:last-child {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
   }
 }

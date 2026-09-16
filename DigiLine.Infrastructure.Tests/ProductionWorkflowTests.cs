@@ -1,4 +1,5 @@
 using DigiLine.Application.Administration;
+using DigiLine.Application.Patients;
 using DigiLine.Application.Queue;
 using DigiLine.Application.Sessions;
 using DigiLine.Domain.Common;
@@ -123,6 +124,21 @@ public sealed class ProductionWorkflowTests : IClassFixture<ProductionWorkflowTe
         }
     }
     [Fact]
+    public async Task PatientCancellationRacingCallNextHasOneValidWinner()
+    {
+        for(var iteration=0;iteration<10;iteration++){
+            var f=await Fixture();var phone=$"9{Random.Shared.NextInt64(100000000,999999999)}";Guid tokenId;
+            await using(var setup=database.Open()){
+                var account=new PhoneAccount(phone);var profile=new PatientProfile(account.Id,"Patient",30);
+                var setupToken=new QueueToken(f.Session,1,profile.Id);setup.AddRange(account,profile,setupToken);await setup.SaveChangesAsync();tokenId=setupToken.Id;
+            }
+            async Task Cancel(){await using var db=database.Open();try{await new CancelPatientTokenService(new Access(phone),new PublicPatientRepository(db),new SessionRepository(db),new QueueTokenRepository(db),new EfTransactionManager(db)).CancelAsync("access",f.Session,tokenId);}catch(InvalidOperationException){}}
+            async Task Call(){await using var db=database.Open();try{await new CallNextTokenService(new SessionRepository(db),new QueueTokenRepository(db),new EfTransactionManager(db)).CallAsync(f.Session);}catch(InvalidOperationException){}}
+            await Task.WhenAll(Cancel(),Call());await using var check=database.Open();var savedToken=await check.QueueTokens.SingleAsync(x=>x.Id==tokenId);
+            Assert.True(savedToken.Status is QueueTokenStatus.Cancelled or QueueTokenStatus.Called);Assert.Equal(1,savedToken.TokenNumber);Assert.Equal(1,await check.QueueTokens.CountAsync(x=>x.SessionId==f.Session));
+        }
+    }
+    [Fact]
     public async Task SimultaneousCompletionIsIdempotentAndPublishesAfterConnectionRelease()
     {
         var f=await Fixture(true,true);
@@ -139,6 +155,13 @@ public sealed class ProductionWorkflowTests : IClassFixture<ProductionWorkflowTe
         public bool Fail;public string Token="";
         public Task SendResetLinkAsync(string email,string link,CancellationToken ct)=>Task.CompletedTask;
         public Task SendInvitationLinkAsync(string email,string link,CancellationToken ct){if(Fail)throw new InvalidOperationException("Test mail failure");Token=link.Split("#token=")[1];return Task.CompletedTask;}
+    }
+    private sealed class Access(string phone):IPatientAccessService
+    {
+        public PhoneVerificationChallenge CreateChallenge(string phoneNumber)=>throw new NotSupportedException();
+        public string? Verify(Guid challengeId,string code)=>throw new NotSupportedException();
+        public string IssueAccess(string phoneNumber)=>throw new NotSupportedException();
+        public string? GetPhoneNumber(string accessToken)=>accessToken=="access"?phone:null;
     }
     public sealed class Database:IAsyncLifetime
     {

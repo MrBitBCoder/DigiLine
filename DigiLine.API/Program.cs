@@ -75,6 +75,9 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("patient-recovery", context =>
         RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ =>
             new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(10), QueueLimit = 0 }));
+    options.AddPolicy("patient-token-action", context =>
+        RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ =>
+            new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(10), QueueLimit = 0 }));
 });
 
 var allowedOrigins = builder.Configuration
@@ -131,12 +134,13 @@ builder.Services.AddScoped<IGetReceptionDashboardService, GetReceptionDashboardS
 builder.Services.AddScoped<IGetPublicClinicService, GetPublicClinicService>();
 builder.Services.AddScoped<IPublicPatientService, PublicPatientService>();
 builder.Services.AddScoped<IPublicQueueService, PublicQueueService>();
+builder.Services.AddScoped<ICancelPatientTokenService, CancelPatientTokenService>();
 builder.Services.AddScoped<IBookTokenService, BookTokenService>();
 builder.Services.AddScoped<ICreateWalkInTokenService, CreateWalkInTokenService>();
 builder.Services.AddScoped<ICallNextTokenService, CallNextTokenService>();
-builder.Services.AddScoped<IRecallTokenService, RecallTokenService>();
 builder.Services.AddScoped<ISkipTokenService, SkipTokenService>();
 builder.Services.AddScoped<ICompleteTokenService, CompleteTokenService>();
+builder.Services.AddScoped<ICompleteAndCallNextTokenService, CompleteAndCallNextTokenService>();
 builder.Services.AddScoped<ICancelTokenService, CancelTokenService>();
 builder.Services.AddScoped<IMarkTokenLateService, MarkTokenLateService>();
 builder.Services.AddScoped<IGetQueuePositionService, GetQueuePositionService>();

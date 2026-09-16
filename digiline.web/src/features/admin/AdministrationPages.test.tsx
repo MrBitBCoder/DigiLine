@@ -20,6 +20,7 @@ beforeEach(() => {
 function show() { render(<ToastProvider><MemoryRouter><AdministrationPage /></MemoryRouter></ToastProvider>); }
 async function fill(confirm = "VerificationOnly123!") {
   const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Add staff" }));
   await user.type(await screen.findByLabelText(/Staff name/), "New staff");
   await user.type(screen.getByLabelText(/Staff email/), "staff@example.test");
   await user.type(screen.getByLabelText(/^Password/), "VerificationOnly123!");
@@ -34,8 +35,8 @@ it("creates staff with selected roles and password without invitation terminolog
   await user.click(screen.getByRole("button", { name: "Create staff" }));
   await waitFor(() => expect(api.request).toHaveBeenCalledWith("/api/admin/staff", { method: "POST", body: { name: "New staff", email: "staff@example.test", roles: [1,2], password: "VerificationOnly123!" } }));
   expect(await screen.findByRole("status")).toHaveTextContent("Staff account created. They can sign in immediately.");
-  expect(screen.getByLabelText(/^Password/)).toHaveValue("");
-  expect(screen.getByLabelText(/^Confirm password/)).toHaveValue("");
+  expect(screen.queryByLabelText(/^Password/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/^Confirm password/)).not.toBeInTheDocument();
 });
 it("rejects confirmation mismatch without posting a password", async () => {
   show(); const user = await fill("DifferentPassword123!");
@@ -70,5 +71,34 @@ it("retains resend and revoke only for legacy pending invitations", async () => 
   show();
   expect(await screen.findByRole("button", { name: "Resend invitation" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Revoke invitation" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Add staff" }));
   expect(screen.getByRole("button", { name: "Create staff" })).toBeInTheDocument();
+});
+it("opens the staff editor with heading focus and restores focus when cancelled", async () => {
+  show();
+  const user = userEvent.setup();
+  const add = await screen.findByRole("button", { name: "Add staff" });
+  await user.click(add);
+  expect(screen.getByRole("heading", { name: "Add staff" })).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(add).toHaveFocus());
+  expect(screen.queryByLabelText(/Staff name/)).not.toBeInTheDocument();
+});
+it("shows roles and account state clearly and confirms deactivation", async () => {
+  show();
+  const user = userEvent.setup();
+  expect(await screen.findByText("Active")).toHaveClass("status-badge", "status-success");
+  expect(screen.getByText("Doctor")).toBeInTheDocument();
+  expect(screen.getByText("Receptionist")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  await user.click(screen.getByLabelText("Active account"));
+  await user.click(screen.getByRole("button", { name: "Save staff" }));
+
+  const dialog = screen.getByRole("dialog", { name: "Deactivate New staff?" });
+  expect(dialog).toHaveTextContent("signed out");
+  expect(screen.getByRole("button", { name: "Go back" })).toHaveFocus();
+  expect(api.request.mock.calls.filter(([, options]) => options?.method === "PUT")).toHaveLength(0);
+  await user.click(screen.getByRole("button", { name: "Deactivate account" }));
+  await waitFor(() => expect(api.request).toHaveBeenCalledWith("/api/admin/staff/staff-1", expect.objectContaining({ method: "PUT" })));
 });

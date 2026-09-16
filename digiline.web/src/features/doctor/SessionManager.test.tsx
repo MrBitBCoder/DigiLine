@@ -27,11 +27,30 @@ it("shows aggregate attendance without patient details", async () => {
 
   expect(await screen.findByText("Morning session")).toBeInTheDocument();
   const row = screen.getAllByRole("row")[1];
-  expect(within(row).getByText("5")).toBeInTheDocument();
-  expect(within(row).getByText("2")).toBeInTheDocument();
-  expect(within(row).getByText("1")).toBeInTheDocument();
+  expect(within(row).getByText("5 total")).toBeInTheDocument();
+  expect(within(row).getByText("2 completed · 1 not attended")).toBeInTheDocument();
   expect(screen.getByRole("table", { name: "Your sessions" })).toBeInTheDocument();
+  for (const header of ["Session", "Date", "Session time", "Booking starts", "Status", "Attendance", "Actions"])
+    expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
   expect(screen.queryByText(/Patient /)).not.toBeInTheDocument();
+});
+
+it("uses one page heading and keeps the primary Add session action available", async () => {
+  render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
+  expect(await screen.findByRole("heading", { name: "Sessions", level: 1 })).toBeInTheDocument();
+  expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(screen.getByRole("button", { name: "Add session" })).toBeEnabled();
+  expect(screen.queryByRole("heading", { name: "Your sessions" })).not.toBeInTheDocument();
+});
+
+it("keeps the compact session identity and actions in each responsive row", async () => {
+  render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
+  const row = (await screen.findByText("Morning session")).closest("tr")!;
+  expect(within(row).getByText("Doctor · Clinic")).toBeInTheDocument();
+  expect(within(row).getByRole("button", { name: "View queue" })).toBeEnabled();
+  expect(within(row).getByRole("button", { name: "Edit" })).toBeEnabled();
+  expect(within(row).getByRole("button", { name: "Delete" })).toBeEnabled();
+  expect(within(row).getByText("Booking open")).toBeInTheDocument();
 });
 
 it("shows every doctor session in the API's newest-first order", async () => {
@@ -190,10 +209,10 @@ it.each(["Running", "Paused"] as const)("edits a %s session without changing its
 
 it("refreshes an open session list after completion in another workspace", async () => {
   render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
-  expect(await screen.findByText("Booking open")).toHaveClass("status-info");
+  expect(await screen.findByText("Booking open", { selector: ".status-badge" })).toHaveClass("status-info");
   api.listSessions.mockResolvedValue(paged([{ ...session, status: "Closed", isBookingOpen: false }]));
   fireEvent.focus(window);
-  await waitFor(() => expect(screen.queryByText("Booking open")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText("Booking open", { selector: ".status-badge" })).not.toBeInTheDocument());
   expect(screen.getAllByText("Completed").find(el => el.classList.contains("status-badge"))).toHaveClass("status-neutral");
 });
 
@@ -204,7 +223,7 @@ it("polls the selected server page for lifecycle updates and cleans up on unmoun
     await act(async () => { await vi.advanceTimersByTimeAsync(200); });
     api.listSessions.mockResolvedValue(paged([{ ...session, status: "Closed", isBookingOpen: false }]));
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
-    expect(screen.queryByText("Booking open")).not.toBeInTheDocument();
+    expect(screen.queryByText("Booking open", { selector: ".status-badge" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Completed").find(el => el.classList.contains("status-badge"))).toHaveClass("status-neutral");
     view.unmount(); const calls = api.listSessions.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
@@ -212,7 +231,7 @@ it("polls the selected server page for lifecycle updates and cleans up on unmoun
   } finally { vi.useRealTimers(); }
 });
 
-it.each([["Scheduled", "1"], ["BookingOpen", "2"], ["Running", "3"], ["Paused", "4"], ["Completed", "5"]])("filters %s with the explicit backend enum value %s", async (label, value) => {
+it.each([["Scheduled", "1"], ["Booking open", "2"], ["Running", "3"], ["Paused", "4"], ["Completed", "5"]])("filters %s with the explicit backend enum value %s", async (label, value) => {
   render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
   await screen.findByText("Morning session");
   const select = screen.getByLabelText("Status");
@@ -230,7 +249,7 @@ it("discards an older BookingOpen response arriving after a Closed refresh", asy
     .mockResolvedValue(paged([{ ...session, status: "Closed", isBookingOpen: false }]));
   fireEvent.focus(window);
   fireEvent.focus(window);
-  await waitFor(() => expect(screen.queryByText("Booking open")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText("Booking open", { selector: ".status-badge" })).not.toBeInTheDocument());
   await act(async () => { resolveOld(paged([session])); });
-  expect(screen.queryByText("Booking open")).not.toBeInTheDocument();
+  expect(screen.queryByText("Booking open", { selector: ".status-badge" })).not.toBeInTheDocument();
 });

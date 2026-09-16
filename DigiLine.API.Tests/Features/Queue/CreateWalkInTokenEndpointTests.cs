@@ -78,6 +78,14 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
     public async Task LegacyUnscopedRoutesAreRetired(string route,string method)
     { Assert.Equal(HttpStatusCode.NotFound,(await factory.Public.SendAsync(new HttpRequestMessage(new HttpMethod(method),route))).StatusCode); }
     [Fact]
+    public async Task RecallRoutesAreRemoved()
+    {
+        var sessionId=Guid.NewGuid();var tokenId=Guid.NewGuid();
+        Assert.Equal(HttpStatusCode.NotFound,(await factory.Doctor.PostAsync($"/api/doctor/sessions/{sessionId}/tokens/{tokenId}/recall",null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await factory.Reception.PostAsync($"/api/reception/sessions/{sessionId}/tokens/{tokenId}/recall",null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await factory.Public.PostAsync($"/api/queue/session/{sessionId}/token/{tokenId}/recall",null)).StatusCode);
+    }
+    [Fact]
     public async Task WalkInValidatesAndEnforcesSessionScope()
     {
         var id=await Session(); var result=await Json(await WalkIn(id)); Assert.Equal(1,result.GetProperty("tokenNumber").GetInt32());
@@ -131,7 +139,6 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
         await Json(await factory.Reception.PostAsync($"/api/reception/sessions/{id}/tokens/{token}/late",null));
         Assert.Equal(HttpStatusCode.Conflict,(await factory.Doctor.PostAsJsonAsync($"/api/doctor/sessions/{id}/complete",new {confirmSkipped=true})).StatusCode);
         await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/queue/call-next",null));
-        await Json(await factory.Reception.PostAsync($"/api/reception/sessions/{id}/tokens/{token}/recall",null));
         await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/tokens/{token}/complete",null));
         Assert.Equal(HttpStatusCode.Conflict,(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/tokens/{token}/complete",null)).StatusCode);
         await Json(await factory.Doctor.PostAsync($"/api/doctor/sessions/{id}/pause",null));

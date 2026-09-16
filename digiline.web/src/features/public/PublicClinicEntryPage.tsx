@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { getBookingState } from "../../shared/ui/statusPresentation";
+import { SessionStateBadges } from "../../shared/ui/StatusBadge";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError, getApiErrorMessage } from "../../api/httpClient";
 import { usePublicQueueRealtime, type RealtimeStatus } from "../../realtime";
 import {
   Button,
   Card,
+  ConfirmationDialog,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -100,6 +103,7 @@ export function PublicClinicEntryPage() {
         token={storedToken}
         clinicName={clinic?.name}
         timeZoneId={clinic?.timeZoneId}
+        session={clinic?.sessions.find((session) => session.id === storedToken.sessionId)}
         onLeave={() => {
           sessionStorage.removeItem(TOKEN_STORAGE);
           setStoredToken(null);
@@ -136,15 +140,16 @@ export function PublicClinicEntryPage() {
     <PublicShell clinicName={clinic.name} compact>
       <div className="public-home-content">
       <header className="public-hero">
-        <span className="eyebrow">{clinic.name}</span>
-        <h1>Join the queue.<br />Keep your day.</h1>
-        <p>Book your place in a live clinic session and follow your token from anywhere.</p>
-        <p>All times: {clinic.timeZoneId ?? "Asia/Kolkata"}</p>
+        <span className="eyebrow">Digital queue</span>
+        <h1>{clinic.name}</h1>
+        <p>Join a clinic session and follow your token from anywhere.</p>
+        <p className="public-time-zone">All times shown in {clinic.timeZoneId ?? "Asia/Kolkata"}</p>
       </header>
       <section className="public-sessions" aria-labelledby="sessions-title">
         <div>
-          <span className="eyebrow">Bookings available</span>
-          <h2 id="sessions-title">Live sessions and bookings</h2>
+          <span className="eyebrow">Today’s queue</span>
+          <h2 id="sessions-title">Choose a session</h2>
+          <p>Join an open queue or find a token you already received.</p>
         </div>
         {visibleSessions.length === 0 ? (
           <EmptyState
@@ -155,14 +160,15 @@ export function PublicClinicEntryPage() {
           <div className="session-list">
             {visibleSessions.map((session) => (
               <Card key={session.id} className="public-session-card">
-                <div>
-                  <span className="public-live-label"><span aria-hidden="true" /> {bookingStatusMessage(session, clinic.timeZoneId)}{session.status === "Paused" ? " · Doctor paused" : ""}</span>
+                <div className="public-session-heading">
+                  <div className="session-badges"><SessionStateBadges session={session} /></div>
                   <h3>{session.name}</h3>
-                  <div className="public-session-timing">
-                    <p><strong>Clinic time:</strong> {formatClinicTime(session.startTime, clinic.timeZoneId)} – {formatClinicTime(session.endTime, clinic.timeZoneId)}</p>
-                    <p><strong>Booking starts:</strong> {formatClinicTime(session.bookingOpenTime, clinic.timeZoneId)}</p>
-                  </div>
+                  {getBookingState(session) === "notOpen" && <p>Booking opens at {formatClinicTime(session.bookingOpenTime, clinic.timeZoneId)}</p>}
                 </div>
+                <dl className="public-session-timing">
+                  <div><dt>Clinic time</dt><dd>{formatClinicTime(session.startTime, clinic.timeZoneId)} – {formatClinicTime(session.endTime, clinic.timeZoneId)}</dd></div>
+                  <div><dt>Booking starts</dt><dd>{formatClinicTime(session.bookingOpenTime, clinic.timeZoneId)}</dd></div>
+                </dl>
                 <dl>
                   <div>
                     <dt>Current token</dt>
@@ -177,13 +183,13 @@ export function PublicClinicEntryPage() {
                     <dd>{session.approximateQueueSize}</dd>
                   </div>
                 </dl>
-                <Button disabled={!session.isBookingOpen} onClick={() => setSelected(session)}>Join queue</Button>
-                {!session.isBookingOpen && (session.status === "Running" || session.status === "Paused") && (
-                  <div className="token-recovery-action">
-                    <span>Already joined this session?</span>
+                {session.isBookingOpen ? <Button onClick={() => setSelected(session)}>Join queue</Button>
+                  : (session.status === "Running" || session.status === "Paused") ? (
+                  <div className="booking-closed-action">
+                    <div><strong>Already joined?</strong><span>New patients can no longer join. You can still check your existing token.</span></div>
                     <Button variant="secondary" onClick={() => setRecoverySession(session)}>Find my token</Button>
                   </div>
-                )}
+                ) : <Button disabled>Join queue</Button>}
               </Card>
             ))}
           </div>
@@ -219,24 +225,20 @@ export function PublicClinicEntryPage() {
     </PublicShell>
   );
 }
-function bookingStatusMessage(session: PublicSessionSummary, timeZoneId?: string) {
-  if (session.isBookingOpen) return "Booking is currently open";
-  if (Date.now() < Date.parse(session.bookingOpenTime))
-    return `Booking opens at ${formatClinicTime(session.bookingOpenTime, timeZoneId)}`;
-  return "Booking has closed for this session";
-}
 
 function PublicShell({
   children,
   clinicName,
   compact = false,
+  patient = false,
 }: {
   children: React.ReactNode;
   clinicName?: string;
   compact?: boolean;
+  patient?: boolean;
 }) {
   return (
-    <main className={`public-entry${compact ? " public-entry-home" : ""}`}>
+    <main className={`public-entry${compact ? " public-entry-home" : ""}${patient ? " public-entry-patient" : ""}`}>
       <div className="public-brand">
         <span className="brand-mark" aria-hidden="true">
           D
@@ -293,10 +295,9 @@ function RecoveryPanel({ session, onCancel, onRecovered }: {
       : getApiErrorMessage(caught)); }
     finally { setBusy(false); }
   }
-  return <div className="booking-backdrop">
-    <Card className="booking-panel" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
+  return <PatientDialog labelledBy="recovery-title" onClose={onCancel}>
       <div className="booking-heading"><div><span className="eyebrow">Already joined?</span><h2 id="recovery-title">Find my token</h2></div>
-        <button type="button" aria-label="Close" onClick={onCancel}>×</button></div>
+        <button type="button" aria-label="Close find my token" autoFocus onClick={onCancel}>×</button></div>
       <p>This only finds a token already issued for {session.name}. It will not create a new token.</p>
       {stage === "phone" && <form onSubmit={requestCode}><TextField label="Phone number" type="tel" autoComplete="tel" value={phone} onChange={event => setPhone(event.target.value)} required />
         <Button busy={busy}>Send verification code</Button></form>}
@@ -307,8 +308,7 @@ function RecoveryPanel({ session, onCancel, onRecovered }: {
           <strong>{profile.name}</strong><span>Age {profile.age}</span></button>) : <p>No patient profiles are registered for this phone number.</p>}
       </div>}
       {error && <p className="form-error" role="alert">{error}</p>}
-    </Card>
-  </div>;
+  </PatientDialog>;
 }
 
 function BookingPanel({
@@ -408,13 +408,7 @@ function BookingPanel({
     }
   }
   return (
-    <div className="booking-backdrop">
-      <Card
-        className="booking-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="booking-title"
-      >
+    <PatientDialog labelledBy="booking-title" onClose={onCancel}>
         <div className="booking-heading">
           <div>
             <span className="eyebrow">Join {session.name}</span>
@@ -428,7 +422,7 @@ function BookingPanel({
                     : "Confirm your place"}
             </h2>
           </div>
-          <button type="button" aria-label="Close" onClick={onCancel}>
+          <button type="button" aria-label="Close join queue" autoFocus onClick={onCancel}>
             ×
           </button>
         </div>
@@ -531,25 +525,43 @@ function BookingPanel({
             {error}
           </p>
         )}
-      </Card>
-    </div>
+    </PatientDialog>
   );
+}
+
+const tokenProgress = ["Waiting", "Called", "InConsultation", "Completed"] as const;
+function tokenStatusMessage(status: PublicTokenState["status"]) {
+  switch (status) {
+    case "Called": return { title: "Doctor is calling you now", message: "Please proceed to the consultation area." };
+    case "InConsultation": return { title: "Consultation in progress", message: "Your token is currently with the doctor." };
+    case "Completed": return { title: "Consultation completed", message: "Thank you for visiting." };
+    case "Cancelled": return { title: "Token cancelled", message: "You have left the queue." };
+    case "NoShow": return { title: "Token marked as no show", message: "This token is no longer active in the queue." };
+    case "Late": return { title: "You are still in the queue", message: "Your token is marked late and remains available to staff." };
+    case "Skipped": return { title: "Your token was skipped", message: "You can still cancel while waiting for staff to call you again." };
+    default: return { title: "You are in the queue", message: "Keep this page open for live updates." };
+  }
 }
 
 function ActiveTokenScreen({
   token,
   clinicName,
   timeZoneId,
+  session,
   onLeave,
 }: {
   token: StoredToken;
   clinicName?: string;
   timeZoneId?: string;
+  session?: PublicSessionSummary;
   onLeave: () => void;
 }) {
+  const toast = useToast();
   const [state, setState] = useState<PublicTokenState | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [confirmCancellation, setConfirmCancellation] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const refresh = useCallback(async () => {
     try {
       setState(
@@ -596,13 +608,13 @@ function ActiveTokenScreen({
   }, [token]);
   if (loading)
     return (
-      <PublicShell clinicName={clinicName}>
+      <PublicShell clinicName={clinicName} patient>
         <LoadingState message="Loading your token…" />
       </PublicShell>
     );
   if (error || !state)
     return (
-      <PublicShell clinicName={clinicName}>
+      <PublicShell clinicName={clinicName} patient>
         <ErrorState
           message={error || "This token is unavailable."}
           onRetry={() => void refresh()}
@@ -612,9 +624,38 @@ function ActiveTokenScreen({
         </Button>
       </PublicShell>
     );
+  const canCancel = ["Waiting", "Late", "Skipped"].includes(state.status);
+  async function cancelToken() {
+    setCancelling(true);
+    try {
+      const cancelled = await publicClinicApi.cancelToken(
+        token.accessToken,
+        token.sessionId,
+        token.tokenId,
+      );
+      setState(cancelled);
+      setConfirmCancellation(false);
+      toast.success(`Token #${cancelled.tokenNumber} was cancelled.`);
+    } catch (caught) {
+      toast.error(getApiErrorMessage(caught));
+    } finally {
+      setCancelling(false);
+    }
+  }
+  const statusMessage = tokenStatusMessage(state.status);
   return (
-    <PublicShell clinicName={clinicName}>
-      <section className="token-screen">
+    <PublicShell clinicName={clinicName} patient>
+      <section className={`token-screen token-status-${state.status.toLowerCase()}`} aria-labelledby="patient-status-title">
+        <header className="patient-status-heading" role="status" aria-live="polite">
+          <span className="eyebrow">Your queue status</span>
+          <h1 id="patient-status-title">{statusMessage.title}</h1>
+          <p>{statusMessage.message}</p>
+        </header>
+        <Card className="patient-token-card" aria-label={`Your token #${state.tokenNumber}`}>
+          <span>Your token number</span>
+          <strong className="patient-token-number">#{state.tokenNumber}</strong>
+          <StatusBadge status={state.status} />
+        </Card>
         <div className="token-live">
           <span className={`realtime-state realtime-${realtime}`}>
             <i aria-hidden="true" />
@@ -622,40 +663,89 @@ function ActiveTokenScreen({
           </span>
           <span>Updated {formatClinicTime(state.updatedAt, timeZoneId)} · {timeZoneId ?? "Asia/Kolkata"}</span>
         </div>
-        <Card className="patient-token-card">
-          <span>Your token</span>
-          <strong>#{state.tokenNumber}</strong>
-          <StatusBadge status={state.status} />
-        </Card>
-        <div className="patient-metrics">
-          <Card>
+        <div className={`patient-metrics${["Waiting", "Late", "Skipped"].includes(state.status) ? " patient-metrics-waiting" : ""}`}>
+          <Card className="now-serving-card">
             <span>Now serving</span>
             <strong>
               {state.currentTokenNumber ? `#${state.currentTokenNumber}` : "—"}
             </strong>
           </Card>
-          <Card>
+          {["Waiting", "Late", "Skipped"].includes(state.status) && <Card>
             <span>Patients ahead</span>
             <strong>{state.patientsAhead ?? "—"}</strong>
-          </Card>
-          <Card>
+          </Card>}
+          {["Waiting", "Late", "Skipped"].includes(state.status) && <Card>
             <span>Estimated wait</span>
             <strong>
               {state.estimatedWaitMinutes === null
                 ? "—"
                 : `${state.estimatedWaitMinutes} min`}
             </strong>
-          </Card>
+          </Card>}
         </div>
+        {tokenProgress.includes(state.status as typeof tokenProgress[number]) && <nav className="token-progress" aria-label="Token progress">
+          <ol>{tokenProgress.map((step, index) => {
+            const current = tokenProgress.indexOf(state.status as typeof tokenProgress[number]);
+            return <li key={step} className={index <= current ? "is-reached" : ""} aria-current={index === current ? "step" : undefined}>
+              <span aria-hidden="true">{index + 1}</span>{step === "InConsultation" ? "In consultation" : step}
+            </li>;
+          })}</ol>
+        </nav>}
+        {session && <Card className="patient-session-details" padding="compact">
+          <div><span>Session</span><strong>{session.name}</strong></div>
+          <div><span>Clinic time</span><strong>{formatClinicTime(session.startTime, timeZoneId)} – {formatClinicTime(session.endTime, timeZoneId)}</strong></div>
+          <div><span>Booking starts</span><strong>{formatClinicTime(session.bookingOpenTime, timeZoneId)}</strong></div>
+        </Card>}
         {state.isPaused && (
           <div className="pause-notice" role="status">
             The session is paused. Your place in the queue is safe.
           </div>
         )}
-        <Button variant="ghost" onClick={onLeave}>
-          View clinic sessions
-        </Button>
+        {state.status === "Cancelled" && (
+          <div className="token-cancelled-notice" role="status">
+            You left the queue. Token #{state.tokenNumber} will no longer be called.
+          </div>
+        )}
+        <div className="token-actions">
+          <Button variant="ghost" onClick={onLeave}>
+            View clinic sessions
+          </Button>
+          {canCancel && (
+            <Button variant="danger" onClick={() => setConfirmCancellation(true)}>
+              Cancel token
+            </Button>
+          )}
+        </div>
       </section>
+      <ConfirmationDialog
+        open={confirmCancellation}
+        title="Cancel your token?"
+        message={`You will leave the queue and token #${state.tokenNumber} will no longer be called.`}
+        confirmLabel="Cancel token"
+        cancelLabel="Keep my token"
+        destructive
+        busy={cancelling}
+        onConfirm={() => void cancelToken()}
+        onCancel={() => setConfirmCancellation(false)}
+      />
     </PublicShell>
   );
+}
+
+function PatientDialog({ labelledBy, onClose, children }: { labelledBy: string; onClose: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const returnFocus = returnFocusRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (returnFocus?.isConnected) returnFocus.focus();
+    };
+  }, []);
+  return <dialog ref={dialogRef} className="booking-dialog" aria-labelledby={labelledBy}
+    onCancel={event => { event.preventDefault(); onClose(); }}>
+    <Card className="booking-panel">{children}</Card>
+  </dialog>;
 }

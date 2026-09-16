@@ -1,9 +1,0 @@
-.foundation-page { display: grid; gap: 2rem; }
-.hero-copy { max-width: 46rem; }
-.hero-copy h1 { margin: .4rem 0 .75rem; font-size: clamp(2.5rem, 7vw, 4.75rem); line-height: .98; letter-spacing: -.055em; }
-.hero-copy p { margin: 0; max-width: 40rem; color: var(--color-muted); font-size: 1.08rem; }
-.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-.metric-card span, .metric-card small { display: block; color: var(--color-muted); }
-.metric-card strong { display: block; margin: .55rem 0 .3rem; color: var(--color-ink); font: 700 2.25rem var(--font-display); }
-.metric-card .metric-status { min-height: 3.5rem; display: flex; align-items: center; }
-@media (max-width: 640px) { .summary-grid { grid-template-columns: 1fr; } }

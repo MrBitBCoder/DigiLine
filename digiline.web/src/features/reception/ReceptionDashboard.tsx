@@ -1,3 +1,4 @@
+import { SessionStateBadges } from "../../shared/ui/StatusBadge";
 import {
   useCallback,
   useEffect,
@@ -15,6 +16,7 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  PageHeader,
   SelectField,
   StatusBadge,
   TextField,
@@ -97,7 +99,6 @@ export function ReceptionDashboard() {
       await action();
       await load();
       if (key === "walk-in") toast.success("Walk-in patient added successfully.");
-      else if (key.startsWith("recall-")) toast.success("Patient called again.");
       else if (key.startsWith("late-")) toast.success("Patient marked as arrived.");
       else if (key.startsWith("cancel-")) toast.success("Token cancelled.");
       else toast.success("Queue updated.");
@@ -174,7 +175,7 @@ export function ReceptionDashboard() {
       render: (x) => <><StatusBadge status={x.status} />{x.status === "Skipped" && <small>Awaiting arrival</small>}</>,
     },
     { key: "registered", header: "Registered at", render: (x) => formatClinicTime(x.createdAt, data?.timeZoneId) },
-    { key: "called", header: "Last called", render: x => x.calledAt ? formatClinicTime(x.calledAt, data?.timeZoneId) : "—" },
+    { key: "called", header: "Called at", render: x => x.calledAt ? formatClinicTime(x.calledAt, data?.timeZoneId) : "—" },
     { key: "late-arrival", header: "Late arrival", render: x => x.lateArrivedAt ? formatClinicTime(x.lateArrivedAt, data?.timeZoneId) : "—" },
     { key: "completed", header: "Completed at", render: x => x.completedAt ? formatClinicTime(x.completedAt, data?.timeZoneId) : "—" },
     {
@@ -183,19 +184,6 @@ export function ReceptionDashboard() {
       align: "right",
       render: (x) => (
         <div className="row-actions">
-          {x.status === "Called" && (
-            <Button
-              variant="ghost"
-              disabled={!!busy || session.status === "Closed"}
-              onClick={() =>
-                void run(`recall-${x.id}`, () =>
-                  receptionApi.recall(session.id, x.id),
-                )
-              }
-            >
-              Call again
-            </Button>
-          )}
           {x.status === "Skipped" && (
             <Button
               variant="ghost"
@@ -236,20 +224,14 @@ export function ReceptionDashboard() {
   ];
   return (
     <div className="doctor-dashboard reception-dashboard">
-      <header className="dashboard-heading">
-        <div>
-          <span className="eyebrow">
-            {data.clinicName || session.clinicName}
-          </span>
-          <h1>Reception desk</h1>
-          <p>Today’s sessions, arrivals, and queue support.</p>
-        </div>
-        <div className="session-state">
-          <span className={`realtime-state realtime-${realtime}`}>
-            <i />
-            {realtime === "connected" ? "Live" : realtime}
-            {realtime !== "connected" && <button type="button" onClick={() => window.dispatchEvent(new Event("digiline-retry-realtime"))}>Retry connection</button>}
-          </span>
+      <PageHeader
+        eyebrow="Reception workspace"
+        title="Reception desk"
+        description={<>{data.clinicName || session.clinicName} · Today’s sessions, arrivals, and queue support</>}
+        context={<span className={`realtime-state realtime-${realtime}`}><i aria-hidden="true" />{realtime === "connected" ? "Live" : realtime}{realtime !== "connected" && <button type="button" onClick={() => window.dispatchEvent(new Event("digiline-retry-realtime"))}>Retry connection</button>}</span>}
+      />
+      <section className="reception-session-toolbar" aria-label="Session selection">
+        <div className="reception-session-controls">
           <SelectField
             label="Session"
             value={selectedId}
@@ -262,9 +244,9 @@ export function ReceptionDashboard() {
               </option>
             ))}
           </SelectField>
-          <nav aria-label="Session pages"><Button disabled={sessionPage <= 1} onClick={() => setSessionPage(p => p - 1)}>Previous sessions</Button><span>Page {sessionPage}</span><Button disabled={sessionPage * (data.pageSize ?? 10) >= (data.totalCount ?? data.sessions.length)} onClick={() => setSessionPage(p => p + 1)}>Next sessions</Button></nav>
+          <nav aria-label="Session pages"><Button aria-label="Previous sessions" disabled={sessionPage <= 1} onClick={() => setSessionPage(p => p - 1)}>Previous</Button><span>Page {sessionPage}</span><Button aria-label="Next sessions" disabled={sessionPage * (data.pageSize ?? 10) >= (data.totalCount ?? data.sessions.length)} onClick={() => setSessionPage(p => p + 1)}>Next</Button></nav>
         </div>
-      </header>
+      </section>
       {actionError && (
         <div className="action-error" role="alert">
           {actionError}
@@ -273,81 +255,29 @@ export function ReceptionDashboard() {
           </button>
         </div>
       )}
-      <section className="reception-session-strip">
-        <div>
-          <strong>{session.doctorName}</strong>
-          <span>
-            {session.name} · {formatClinicTime(session.startTime, data.timeZoneId)} – {formatClinicTime(session.endTime, data.timeZoneId)} · {data.timeZoneId ?? "Asia/Kolkata"}
-          </span>
-        </div>
-        <StatusBadge status={session.status} /><span>{session.isBookingOpen ? "Booking open" : "Booking closed"}</span>
-        <span>
-          {session.status === "Paused"
-            ? "Doctor temporarily unavailable"
-            : session.status === "Running"
-              ? "Doctor available"
-              : "Doctor not currently consulting"}
-        </span>
+      <section className="reception-overview" aria-label="Active session and queue summary">
+        <Card padding="compact" className="reception-active-panel">
+          <div className="reception-session-copy">
+            <span className="eyebrow">Active session</span>
+            <h2>{session.doctorName}</h2>
+            <p>{session.name} · {formatClinicTime(session.startTime, data.timeZoneId)} – {formatClinicTime(session.endTime, data.timeZoneId)} · {data.timeZoneId ?? "Asia/Kolkata"}</p>
+            <div className="reception-session-state">
+              <SessionStateBadges session={session} />
+              <span>{session.status === "Paused" ? "Doctor temporarily unavailable" : session.status === "Running" ? "Doctor available" : "Doctor not currently consulting"}</span>
+            </div>
+          </div>
+          <div className="reception-current-token">
+            <span className="eyebrow">Current token</span>
+            <strong>{current ? `#${current.tokenNumber}` : "—"}</strong>
+            <small>{current ? `${patientName(current)} · ${patientDetails(current)}` : "No active call"}</small>
+          </div>
+        </Card>
+        <dl className="reception-queue-summary" aria-label="Queue summary">
+          <div><dt>Waiting</dt><dd>{session.queueSummary.waitingCount}</dd><dd className="summary-detail">Ready to be called</dd></div>
+          <div><dt>Late</dt><dd>{session.queueSummary.lateCount}</dd><dd className="summary-detail">Needs assistance</dd></div>
+          <div><dt>Total</dt><dd>{session.queueSummary.totalCount}</dd><dd className="summary-detail">Tokens issued</dd></div>
+        </dl>
       </section>
-      <section className="dashboard-metrics">
-        <Card className="current-token-card">
-          <span className="metric-label">Current token</span>
-          <strong>{current ? `#${current.tokenNumber}` : "—"}</strong>
-          <small>
-            {current ? `${patientName(current)} · ${patientDetails(current)}` : "No active call"}
-          </small>
-        </Card>
-        <Card>
-          <span className="metric-label">Waiting</span>
-          <strong>{session.queueSummary.waitingCount}</strong>
-          <small>Ready to be called</small>
-        </Card>
-        <Card>
-          <span className="metric-label">Late</span>
-          <strong>{session.queueSummary.lateCount}</strong>
-          <small>Needs assistance</small>
-        </Card>
-        <Card>
-          <span className="metric-label">Total</span>
-          <strong>{session.queueSummary.totalCount}</strong>
-          <small>Tokens issued</small>
-        </Card>
-      </section>
-      <Card className="walk-in-card">
-        <div>
-          <span className="eyebrow">New arrival</span>
-          <h2>Register a walk-in</h2>
-          <p>Issue the next token for the selected session.</p>
-        </div>
-        <form onSubmit={submit}>
-          <TextField
-            label="Patient name"
-            value={name}
-            maxLength={200}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <TextField
-            label="Phone (optional)"
-            type="tel"
-            maxLength={20}
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          <TextField label="Age" type="number" min={0} max={130} step={1} value={age} onChange={event => setAge(event.target.value)} required />
-          <Button
-            busy={busy === "walk-in"}
-            disabled={!!busy || !session.isBookingOpen}
-          >
-            Issue token
-          </Button>
-        </form>
-        {!session.isBookingOpen && (
-          <small className="booking-warning">
-            Walk-in booking is closed for this session.
-          </small>
-        )}
-      </Card>
       <section className="queue-section">
         <div className="section-heading">
           <div>
@@ -375,6 +305,20 @@ export function ReceptionDashboard() {
           />
         )}
       </section>
+      <Card className="walk-in-card">
+        <div>
+          <span className="eyebrow">New arrival</span>
+          <h2>Register a walk-in</h2>
+          <p>Issue the next token for the selected session.</p>
+        </div>
+        <form onSubmit={submit}>
+          <TextField label="Patient name" value={name} maxLength={200} onChange={(e) => setName(e.target.value)} required />
+          <TextField label="Phone (optional)" type="tel" maxLength={20} value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <TextField label="Age" type="number" min={0} max={130} step={1} value={age} onChange={event => setAge(event.target.value)} required />
+          <Button busy={busy === "walk-in"} disabled={!!busy || !session.isBookingOpen}>Issue token</Button>
+        </form>
+        {!session.isBookingOpen && <small className="booking-warning">Walk-in booking is closed for this session.</small>}
+      </Card>
       <ConfirmationDialog
         open={!!confirmation}
         title={confirmation?.title ?? ""}

@@ -11,7 +11,6 @@ namespace DigiLine.API.Features.Queue
         private readonly ICreateWalkInTokenService _createWalkInTokenService;
         private readonly IGetOrderedQueueService _getOrderedQueueService;
         private readonly ICallNextTokenService _callNextTokenService;
-        private readonly IRecallTokenService _recallTokenService;
         private readonly ISkipTokenService _skipTokenService;
         private readonly ICompleteTokenService _completeTokenService;
         private readonly ICancelTokenService _cancelTokenService;
@@ -24,7 +23,6 @@ namespace DigiLine.API.Features.Queue
             ICreateWalkInTokenService createWalkInTokenService,
             IGetOrderedQueueService getOrderedQueueService,
             ICallNextTokenService callNextTokenService,
-            IRecallTokenService recallTokenService,
             ISkipTokenService skipTokenService,
             ICompleteTokenService completeTokenService,
             ICancelTokenService cancelTokenService,
@@ -36,7 +34,6 @@ namespace DigiLine.API.Features.Queue
             _createWalkInTokenService = createWalkInTokenService;
             _getOrderedQueueService = getOrderedQueueService;
             _callNextTokenService = callNextTokenService;
-            _recallTokenService = recallTokenService;
             _skipTokenService = skipTokenService;
             _completeTokenService = completeTokenService;
             _cancelTokenService = cancelTokenService;
@@ -98,20 +95,6 @@ namespace DigiLine.API.Features.Queue
         {
             var token = await _callNextTokenService.CallAsync(
                 sessionId,
-                cancellationToken);
-
-            return Ok(token);
-        }
-
-        [HttpPost("session/{sessionId:guid}/token/{tokenId:guid}/recall")]
-        public async Task<IActionResult> Recall(
-            Guid sessionId,
-            Guid tokenId,
-            CancellationToken cancellationToken)
-        {
-            var token = await _recallTokenService.RecallAsync(
-                sessionId,
-                tokenId,
                 cancellationToken);
 
             return Ok(token);

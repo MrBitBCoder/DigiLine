@@ -1,3 +1,4 @@
+import { SessionStateBadges } from "../../shared/ui/StatusBadge";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, getApiErrorMessage } from "../../api/httpClient";
@@ -18,6 +19,8 @@ import {
 
   LoadingState,
 
+  PageHeader,
+
   StatusBadge,
 
   useToast,
@@ -29,6 +32,8 @@ import {
 import type {
 
   DoctorSessionDetails,
+
+  CompleteAndCallNextResult,
 
   QueueToken,
 
@@ -74,15 +79,20 @@ function actionErrorMessage(error: unknown) {
   return getApiErrorMessage(error, "The queue action could not be completed.");
 }
 
-function actionSuccessMessage(actionKey: string) {
+function actionSuccessMessage(actionKey: string, result?: unknown) {
   if (actionKey === "start-session") return "Session started.";
   if (actionKey === "pause-session") return "Session paused.";
   if (actionKey === "resume-session") return "Session resumed.";
   if (actionKey === "stop-booking") return "Booking stopped. No new patients can join.";
   if (actionKey === "complete-session") return "Session completed.";
   if (actionKey === "call-next") return "Next patient called.";
-  if (actionKey.startsWith("recall-")) return "Patient called again.";
   if (actionKey.startsWith("skip-")) return "Patient skipped.";
+  if (actionKey.startsWith("complete-next-") && result && typeof result === "object") {
+    const value = result as CompleteAndCallNextResult;
+    return value.calledToken
+      ? `Token #${value.completedToken.tokenNumber} completed. Token #${value.calledToken.tokenNumber} called.`
+      : `Token #${value.completedToken.tokenNumber} completed. No patients are waiting.`;
+  }
   if (actionKey.startsWith("complete-")) return "Consultation completed.";
   if (actionKey.startsWith("late-")) return "Patient marked as arrived.";
   return "Queue updated.";
@@ -270,7 +280,7 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
     try {
 
-      await action();
+      const result = await action();
 
       refreshVersion.current++;
 
@@ -278,7 +288,7 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
       setDetails(next); setPage(next.page ?? 1);
 
-      toast.success(actionSuccessMessage(actionKey));
+      toast.success(actionSuccessMessage(actionKey, result));
 
       return true;
 
@@ -315,6 +325,7 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
   const unfinished = session.queueSummary.unfinishedCount ?? (session.queueSummary.waitingCount + session.queueSummary.lateCount + (current ? 1 : 0));
 
   const skipped = session.queueSummary.skippedCount ?? 0;
+  const hasCallablePatient = session.queueSummary.waitingCount + session.queueSummary.lateCount > 0;
 
   const lifecycleControl = <div className="lifecycle-buttons">
 
@@ -328,7 +339,7 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
     {(running || session.status === "Paused") && <Button disabled={!!pendingAction || !bookingsStopped || unfinished > 0} title={!bookingsStopped ? "Stop booking first" : unfinished ? `Resolve ${unfinished} unfinished tokens first` : undefined} onClick={() => confirm({ title: `Complete ${session.name}?`, message: `This completes the session permanently. ${skipped} remaining skipped patients will be marked NoShow.`, label: "Complete session", actionKey: "complete-session", run: () => doctorApi.completeSession(session.id) })}>Complete session</Button>}
 
-    <span>{session.isBookingOpen ? "Booking open" : bookingsStopped ? "Booking stopped" : "Booking not yet open"}{unfinished > 0 && session.status !== "Closed" ? ` · ${unfinished} tokens to resolve` : ""}</span>
+    {unfinished > 0 && session.status !== "Closed" && <span>{unfinished} tokens to resolve</span>}
 
   </div>;
 
@@ -408,7 +419,7 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
     },
 
-    { key: "called", header: "Last called", render: token => token.calledAt ? formatClinicTime(token.calledAt, session.timeZoneId) : "—" },
+    { key: "called", header: "Called at", render: token => token.calledAt ? formatClinicTime(token.calledAt, session.timeZoneId) : "—" },
 
     { key: "late-arrival", header: "Late arrival", render: token => token.lateArrivedAt ? formatClinicTime(token.lateArrivedAt, session.timeZoneId) : "—" },
 
@@ -460,17 +471,7 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
         )}
 
-        {token.id === current?.id && token.status === "Called" && <>
-
-          <Button variant="ghost" aria-label={`Call again token #${token.tokenNumber}`} disabled={!running || !!pendingAction} onClick={() => void runAction(`recall-${token.id}`, () => doctorApi.recall(session.id, token.id))}>Call again</Button>
-
-          <Button variant="ghost" aria-label={`Not here—skip token #${token.tokenNumber}`} disabled={!running || !!pendingAction} onClick={() => confirm({ title: `Patient not here for token #${token.tokenNumber}?`, message: "The patient leaves the active call. If they arrive later, use Patient arrived to place them after waiting patients.", label: "Not here—skip", actionKey: `skip-${token.id}`, run: () => doctorApi.skip(session.id, token.id) })}>Not here—skip</Button>
-
-        </>}
-
-        {token.id === current?.id && (token.status === "Called" || token.status === "InConsultation") &&
-
-          <Button variant="ghost" aria-label={`Complete token #${token.tokenNumber}`} disabled={!running || !!pendingAction} onClick={() => confirm({ title: `Complete token #${token.tokenNumber}?`, message: "This marks the consultation complete and removes the patient from the active queue.", label: "Complete consultation", actionKey: `complete-${token.id}`, run: () => doctorApi.complete(session.id, token.id) })}>Complete</Button>}
+        {token.id === current?.id && <span className="no-action">Current patient</span>}
 
         {token.status !== "Skipped" && token.id !== current?.id && <span className="no-action">—</span>}
 
@@ -484,89 +485,13 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
     <div className="doctor-dashboard">
 
-      <header className="dashboard-heading">
-
-        <div>
-
-          <span className="eyebrow">Active session</span>
-
-          <span className="session-clinic">{session.clinicName}</span>
-
-          <h1>Good to see you, {session.doctorName}.</h1>
-
-          <p>
-
-            {session.name} · {formatRange(session.startTime, session.endTime, session.timeZoneId)} · {session.timeZoneId ?? "Asia/Kolkata"}
-
-          </p>
-
-        </div>
-
-        <div className="session-state" aria-label="Active session status and controls">
-
-          <StatusBadge status={session.status} />
-
-          <span
-
-            className={
-
-              session.isBookingOpen ? "booking-open" : "booking-closed"
-
-            }
-
-          >
-
-            {session.isBookingOpen
-
-              ? "Booking window open"
-
-              : "Booking window closed"}
-
-          </span>
-
-          <div className="header-actions">
-
-            {lifecycleControl}
-
-            <Button
-
-              busy={pendingAction === "call-next"}
-
-              disabled={
-
-                !running ||
-
-                !!pendingAction ||
-
-                session.queueSummary.waitingCount +
-
-                  session.queueSummary.lateCount ===
-
-                  0
-
-              }
-
-              onClick={() =>
-
-                void runAction("call-next", () =>
-
-                  doctorApi.callNext(session.id),
-
-                )
-
-              }
-
-            >
-
-              Call next
-
-            </Button>
-
-          </div>
-
-        </div>
-
-      </header>
+      <PageHeader
+        eyebrow={<>Doctor dashboard · {session.clinicName}</>}
+        title={session.name}
+        description={<>{formatRange(session.startTime, session.endTime, session.timeZoneId)} · {session.timeZoneId ?? "Asia/Kolkata"}</>}
+        context={<div className="session-state compact-session-state"><SessionStateBadges session={session} /></div>}
+        actions={lifecycleControl}
+      />
 
       {actionError && (
 
@@ -594,173 +519,89 @@ export function DoctorDashboard({ initialSessionId }: { initialSessionId?: strin
 
       )}
 
-      <section className="dashboard-metrics" aria-label="Queue summary">
-
-        <Card className="current-token-card">
-
-          <span className="metric-label">Current token</span>
-
-          <strong>{current ? `#${current.tokenNumber}` : "—"}</strong>
-
-          <small>
-
-            {current
-
-              ? patientName(current)
-
-              : "No patient is currently called"}
-
-          </small>
-
-        </Card>
-
-        <Card>
-
-          <span className="metric-label">Waiting</span>
-
-          <strong>{session.queueSummary.waitingCount}</strong>
-
-          <small>Ready to be called</small>
-
-        </Card>
-
-        <Card>
-
-          <span className="metric-label">Late</span>
-
-          <strong>{session.queueSummary.lateCount}</strong>
-
-          <small>Patients to review</small>
-
-        </Card>
-
-        <Card>
-
-          <span className="metric-label">Total queue</span>
-
-          <strong>{session.queueSummary.totalCount}</strong>
-
-          <small>{session.averageConsultationMinutes} min average visit</small>
-
-        </Card>
-
-      </section>
-
-      {current &&
-
-        (current.status === "Called" ||
-
-          current.status === "InConsultation") && (
-
-          <Card className="current-actions">
-
-            <div>
-
-              <span className="eyebrow">Now serving</span>
-
-              <h2>Token #{current.tokenNumber}</h2>
-
-              <p>{patientName(current)} · {patientDetails(current)}</p>
-
+      <section className="doctor-operations" aria-label="Current queue activity">
+        <Card className={`current-patient-panel${current ? " has-current-patient" : ""}`}>
+          <div className="current-patient-identity">
+            <span className="eyebrow">{current ? "Current patient" : "Queue ready"}</span>
+            <div className="current-patient-heading">
+              <h2>{current ? `Token #${current.tokenNumber}` : "No patient called"}</h2>
+              {current && <StatusBadge status={current.status} />}
             </div>
+            <p>
+              {current
+                ? <><strong>{patientName(current)}</strong><span> · {patientDetails(current)}</span></>
+                : hasCallablePatient
+                  ? "Call the next eligible patient when you are ready."
+                  : "No waiting or late patients are ready to call."}
+            </p>
+          </div>
 
-            <div className="action-buttons">
+          <div className="current-patient-actions" aria-label="Current patient actions">
+            {!current && <Button
+              className="primary-queue-action"
+              busy={pendingAction === "call-next"}
+              disabled={!running || !!pendingAction || !hasCallablePatient}
+              onClick={() => void runAction("call-next", () => doctorApi.callNext(session.id))}
+            >Call next</Button>}
 
-              {current.status === "Called" && (
-
-                <Button
-
-                  variant="secondary"
-
-                  busy={pendingAction === `recall-${current.id}`}
-
-                  disabled={!!pendingAction}
-
-                  onClick={() =>
-
-                    void runAction(`recall-${current.id}`, () =>
-
-                      doctorApi.recall(session.id, current.id),
-
-                    )
-
-                  }
-
-                >
-
-                  Call again
-
-                </Button>
-
-              )}
-
-              <Button
-
-                variant="secondary"
-
-                disabled={!!pendingAction || current.status !== "Called"}
-
-                onClick={() =>
-
-                  confirm({
-
-                    title: `Patient not here for token #${current.tokenNumber}?`,
-
-                    message:
-
-                      "The patient will leave the active call. If they arrive later, use Patient arrived to place them after waiting patients.",
-
-                    label: "Not here—skip",
-
-                    actionKey: `skip-${current.id}`,
-
-                    run: () => doctorApi.skip(session.id, current.id),
-
-                  })
-
-                }
-
-              >
-
-                Not here—skip
-
-              </Button>
-
-              <Button
-
+            {current && (current.status === "Called" || current.status === "InConsultation") && <>
+              {hasCallablePatient && <Button
+                className="primary-queue-action"
                 disabled={!!pendingAction}
+                onClick={() => confirm({
+                  title: `Complete token #${current.tokenNumber} and call next?`,
+                  message: "This completes the current consultation and calls the next eligible patient in queue order.",
+                  label: "Complete & call next",
+                  actionKey: `complete-next-${current.id}`,
+                  run: () => doctorApi.completeAndCallNext(session.id, current.id),
+                })}
+              >Complete &amp; call next</Button>}
 
-                onClick={() =>
+              {!hasCallablePatient && <Button
+                className="primary-queue-action"
+                disabled={!!pendingAction}
+                onClick={() => confirm({
+                  title: `Complete token #${current.tokenNumber}?`,
+                  message: "This marks the consultation complete and removes the patient from the active queue.",
+                  label: "Complete consultation",
+                  actionKey: `complete-${current.id}`,
+                  run: () => doctorApi.complete(session.id, current.id),
+                })}
+              >Complete</Button>}
 
-                  confirm({
+              {current.status === "Called" && <Button
+                variant="secondary"
+                disabled={!!pendingAction}
+                onClick={() => confirm({
+                  title: `Patient not here for token #${current.tokenNumber}?`,
+                  message: "The patient will leave the active call. If they arrive later, use Patient arrived to place them after waiting patients.",
+                  label: "Not here—skip",
+                  actionKey: `skip-${current.id}`,
+                  run: () => doctorApi.skip(session.id, current.id),
+                })}
+              >Not here—skip</Button>}
 
-                    title: `Complete token #${current.tokenNumber}?`,
+              {hasCallablePatient && <Button
+                variant="secondary"
+                disabled={!!pendingAction}
+                onClick={() => confirm({
+                  title: `Complete token #${current.tokenNumber}?`,
+                  message: "This marks the consultation complete and removes the patient from the active queue.",
+                  label: "Complete consultation",
+                  actionKey: `complete-${current.id}`,
+                  run: () => doctorApi.complete(session.id, current.id),
+                })}
+              >Complete</Button>}
+            </>}
+          </div>
+        </Card>
 
-                    message:
-
-                      "This marks the consultation complete and removes the patient from the active queue.",
-
-                    label: "Complete consultation",
-
-                    actionKey: `complete-${current.id}`,
-
-                    run: () => doctorApi.complete(session.id, current.id),
-
-                  })
-
-                }
-
-              >
-
-                Complete
-
-              </Button>
-
-            </div>
-
-          </Card>
-
-        )}
+        <dl className="queue-summary-strip" aria-label="Queue summary">
+          <div><dt>Waiting</dt><dd>{session.queueSummary.waitingCount}</dd><dd className="summary-detail">Ready to call</dd></div>
+          <div><dt>Late</dt><dd>{session.queueSummary.lateCount}</dd><dd className="summary-detail">After waiting patients</dd></div>
+          <div><dt>Total queue</dt><dd>{session.queueSummary.totalCount}</dd><dd className="summary-detail">{session.averageConsultationMinutes} min average visit</dd></div>
+        </dl>
+      </section>
 
       <section className="queue-section" aria-labelledby="queue-title">
 

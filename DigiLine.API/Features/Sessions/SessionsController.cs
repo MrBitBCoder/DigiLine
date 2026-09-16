@@ -19,9 +19,9 @@ namespace DigiLine.API.Features.Sessions
         private readonly IManageDoctorSessionService? _manageSessionService;
         private readonly IGetDoctorSessionsService? _getDoctorSessionsService;
         private readonly ICallNextTokenService? _callNextService;
-        private readonly IRecallTokenService? _recallService;
         private readonly ISkipTokenService? _skipService;
         private readonly ICompleteTokenService? _completeService;
+        private readonly ICompleteAndCallNextTokenService? _completeAndCallNextService;
         private readonly IMarkTokenLateService? _lateService;
 
         public SessionsController(
@@ -29,21 +29,21 @@ namespace DigiLine.API.Features.Sessions
             ICreateDoctorSessionService createSessionService,
             IGetDoctorSessionsService? getDoctorSessionsService = null,
             ICallNextTokenService? callNextService = null,
-            IRecallTokenService? recallService = null,
             ISkipTokenService? skipService = null,
             ICompleteTokenService? completeService = null,
             IMarkTokenLateService? lateService = null,
             IManageDoctorSessionService? manageSessionService = null,
-            IClinicTimeZoneResolver? timeZones = null, IStaffSessionQueries? paged = null)
+            IClinicTimeZoneResolver? timeZones = null, IStaffSessionQueries? paged = null,
+            ICompleteAndCallNextTokenService? completeAndCallNextService = null)
         {
             _paged = paged;
             _lifecycleService = lifecycleService;
             _createSessionService = createSessionService;
             _getDoctorSessionsService = getDoctorSessionsService;
             _callNextService = callNextService;
-            _recallService = recallService;
             _skipService = skipService;
             _completeService = completeService;
+            _completeAndCallNextService = completeAndCallNextService;
             _lateService = lateService;
             _manageSessionService = manageSessionService;
             _timeZones = timeZones;
@@ -175,10 +175,6 @@ namespace DigiLine.API.Features.Sessions
         public Task<IActionResult> CallNext(Guid sessionId, CancellationToken cancellationToken) =>
             RunQueueAction(sessionId, () => Required(_callNextService).CallAsync(sessionId, cancellationToken), cancellationToken);
 
-        [HttpPost("sessions/{sessionId:guid}/tokens/{tokenId:guid}/recall")]
-        public Task<IActionResult> Recall(Guid sessionId, Guid tokenId, CancellationToken cancellationToken) =>
-            RunQueueAction(sessionId, () => Required(_recallService).RecallAsync(sessionId, tokenId, cancellationToken), cancellationToken);
-
         [HttpPost("sessions/{sessionId:guid}/tokens/{tokenId:guid}/skip")]
         public Task<IActionResult> Skip(Guid sessionId, Guid tokenId, CancellationToken cancellationToken) =>
             RunQueueAction(sessionId, () => Required(_skipService).SkipAsync(sessionId, tokenId, cancellationToken), cancellationToken);
@@ -186,6 +182,14 @@ namespace DigiLine.API.Features.Sessions
         [HttpPost("sessions/{sessionId:guid}/tokens/{tokenId:guid}/complete")]
         public Task<IActionResult> Complete(Guid sessionId, Guid tokenId, CancellationToken cancellationToken) =>
             RunQueueAction(sessionId, () => Required(_completeService).CompleteAsync(sessionId, tokenId, cancellationToken), cancellationToken);
+
+        [HttpPost("sessions/{sessionId:guid}/tokens/{tokenId:guid}/complete-and-call-next")]
+        public async Task<IActionResult> CompleteAndCallNext(Guid sessionId, Guid tokenId, CancellationToken cancellationToken)
+        {
+            if (!await OwnsSession(sessionId, cancellationToken)) return NotFound();
+            return Ok(await Required(_completeAndCallNextService)
+                .CompleteAndCallNextAsync(sessionId, tokenId, cancellationToken));
+        }
 
         [HttpPost("sessions/{sessionId:guid}/tokens/{tokenId:guid}/late")]
         public Task<IActionResult> Late(Guid sessionId, Guid tokenId, CancellationToken cancellationToken) =>

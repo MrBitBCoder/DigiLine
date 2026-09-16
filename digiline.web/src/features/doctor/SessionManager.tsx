@@ -1,6 +1,7 @@
+import { statusPresentation } from "../../shared/ui/statusPresentation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiErrorMessage } from "../../api/httpClient";
-import { Button, ConfirmationDialog, DataTable, StatusBadge, useToast, type TableColumn } from "../../shared/ui";
+import { Button, ConfirmationDialog, DataTable, PageHeader, SelectField, StatusBadge, TextField, useToast, type TableColumn } from "../../shared/ui";
 import type { DoctorSessionSummary, SessionStatus } from "../../shared/types/domain";
 import { CreateSessionForm } from "./CreateSessionForm";
 import { doctorApi } from "./doctorApi";
@@ -9,6 +10,19 @@ import { defaultClinicTimeZone, formatClinicTime } from "../../shared/clinicTime
 const sessionStatusValues: Record<SessionStatus, number> = { Scheduled: 1, BookingOpen: 2, Running: 3, Paused: 4, Closed: 5 };
 
 type DateFilter = "all" | "day" | "range";
+
+function formatClinicDate(value: string, timeZoneId: string) {
+  return new Intl.DateTimeFormat(undefined, { timeZone: timeZoneId, year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
+}
+
+function formatSessionTimeRange(session: DoctorSessionSummary, fallbackTimeZone: string) {
+  const zone = session.timeZoneId ?? fallbackTimeZone;
+  const startDate = formatClinicDate(session.startTime, zone);
+  const endDate = formatClinicDate(session.endTime, zone);
+  return startDate === endDate
+    ? `${formatClinicTime(session.startTime, zone)} – ${formatClinicTime(session.endTime, zone)}`
+    : `${formatClinicTime(session.startTime, zone)} – ${formatClinicTime(session.endTime, zone, true)}`;
+}
 
 export function SessionManager({ onSelect, onDeleted }: { onSelect: (id: string) => Promise<void>; onDeleted: () => Promise<void> }) {
   const toast = useToast();
@@ -77,14 +91,12 @@ export function SessionManager({ onSelect, onDeleted }: { onSelect: (id: string)
   }
 
   const columns: TableColumn<DoctorSessionSummary>[] = [
-    { key: "name", header: "Session", render: session => <strong>{session.name}</strong> },
-    { key: "booking", header: "Booking opens", render: session => formatClinicTime(session.bookingOpenTime, session.timeZoneId ?? timeZoneId, true) },
-    { key: "start", header: "Start", render: session => formatClinicTime(session.startTime, session.timeZoneId ?? timeZoneId, true) },
-    { key: "end", header: "End", render: session => formatClinicTime(session.endTime, session.timeZoneId ?? timeZoneId, true) },
+    { key: "name", header: "Session", render: session => <div className="session-name-cell"><strong>{session.name}</strong><small>{session.doctorName} · {session.clinicName}</small></div> },
+    { key: "date", header: "Date", render: session => formatClinicDate(session.startTime, session.timeZoneId ?? timeZoneId) },
+    { key: "time", header: "Session time", render: session => formatSessionTimeRange(session, timeZoneId) },
+    { key: "booking", header: "Booking starts", render: session => <div className="session-booking-cell"><span>{formatClinicTime(session.bookingOpenTime, session.timeZoneId ?? timeZoneId)}</span><small>{formatClinicDate(session.bookingOpenTime, session.timeZoneId ?? timeZoneId)}</small></div> },
     { key: "status", header: "Status", render: session => <StatusBadge status={session.status} /> },
-    { key: "total", header: "Total tokens", render: session => session.queueSummary.totalCount },
-    { key: "completed", header: "Completed", render: session => session.queueSummary.completedCount },
-    { key: "not-attended", header: "Not attended", render: session => session.queueSummary.notAttendedCount },
+    { key: "attendance", header: "Attendance", render: session => <div className="session-attendance"><strong>{session.queueSummary.totalCount} total</strong><small>{session.queueSummary.completedCount} completed · {session.queueSummary.notAttendedCount} not attended</small></div> },
     { key: "actions", header: "Actions", align: "right", render: session => {
       const canManage = session.queueSummary.totalCount === 0;
       return <div className="session-manager-actions"><Button variant="ghost" onClick={() => void onSelect(session.id)}>View queue</Button><Button variant="secondary" disabled={!canManage} title={canManage ? undefined : "Sessions with assigned queue tokens cannot be edited"} onClick={() => { setEditing(session); setCreating(false); }}>Edit</Button><Button variant="danger" disabled={!canManage} title={canManage ? undefined : "Sessions with assigned queue tokens cannot be deleted"} onClick={() => setDeleting(session)}>Delete</Button></div>;
@@ -100,16 +112,21 @@ export function SessionManager({ onSelect, onDeleted }: { onSelect: (id: string)
         : "";
 
   return <section className="session-manager" aria-labelledby="sessions-heading">
-    <div className="section-heading"><div><span className="eyebrow">Schedule</span><h2 id="sessions-heading">Your sessions</h2><p>All times: {timeZoneId}</p></div><Button variant="secondary" disabled={!zoneReady} onClick={() => { setCreating(true); setEditing(null); }}>Add session</Button></div>
+    <PageHeader
+      eyebrow="Doctor workspace"
+      title={<span id="sessions-heading">Sessions</span>}
+      description={<>Manage your schedule · All times in {timeZoneId}</>}
+      actions={<Button disabled={!zoneReady} onClick={() => { setCreating(true); setEditing(null); }}>Add session</Button>}
+    />
     {error && <p role="alert" className="form-error">{error}</p>}
     {creating && <CreateSessionForm onSaved={saved} onCancel={() => setCreating(false)} timeZoneId={timeZoneId} />}
     {editing && <CreateSessionForm key={editing.id} session={editing} onSaved={saved} onCancel={() => setEditing(null)} timeZoneId={editing.timeZoneId ?? timeZoneId} />}
     {<div className="session-filters" role="group" aria-label="Filter sessions">
-      <label>Search by name<input type="search" value={nameFilter} onChange={event => { setPage(1); setNameFilter(event.target.value); }} placeholder="Search session name" /></label>
-      <label>Status<select value={statusFilter} onChange={event => { setPage(1); setStatusFilter(event.target.value); }}><option value="">All statuses</option>{Object.entries(sessionStatusValues).map(([status, value]) => <option key={status} value={value}>{status === "Closed" ? "Completed" : status}</option>)}</select></label>
-      <label>Date filter<select value={dateFilter} disabled={!zoneReady} onChange={event => { setPage(1); setDateFilter(event.target.value as DateFilter); }}><option value="all">All dates</option><option value="day">Single day</option><option value="range">Date range</option></select></label>
-      {dateFilter === "day" && <label>Session date<input type="date" value={day} disabled={!zoneReady} onChange={event => { setPage(1); setDay(event.target.value); }} /></label>}
-      {dateFilter === "range" && <><label>From date<input type="date" value={fromDate} disabled={!zoneReady} onChange={event => { setPage(1); setFromDate(event.target.value); }} /></label><label>To date<input type="date" value={toDate} disabled={!zoneReady} onChange={event => { setPage(1); setToDate(event.target.value); }} /></label></>}
+      <TextField label="Search by name" type="search" value={nameFilter} onChange={event => { setPage(1); setNameFilter(event.target.value); }} placeholder="Search session name" />
+      <SelectField label="Status" value={statusFilter} onChange={event => { setPage(1); setStatusFilter(event.target.value); }}><option value="">All statuses</option>{Object.entries(sessionStatusValues).map(([status, value]) => <option key={status} value={value}>{statusPresentation[status as SessionStatus].label}</option>)}</SelectField>
+      <SelectField label="Date filter" value={dateFilter} disabled={!zoneReady} onChange={event => { setPage(1); setDateFilter(event.target.value as DateFilter); }}><option value="all">All dates</option><option value="day">Single day</option><option value="range">Date range</option></SelectField>
+      {dateFilter === "day" && <TextField label="Session date" type="date" value={day} disabled={!zoneReady} onChange={event => { setPage(1); setDay(event.target.value); }} />}
+      {dateFilter === "range" && <><TextField label="From date" type="date" value={fromDate} disabled={!zoneReady} onChange={event => { setPage(1); setFromDate(event.target.value); }} /><TextField label="To date" type="date" value={toDate} disabled={!zoneReady} onChange={event => { setPage(1); setToDate(event.target.value); }} /></>}
       <Button variant="ghost" onClick={() => { setPage(1); setStatusFilter(""); setNameFilter(""); setDateFilter("all"); setDay(""); setFromDate(""); setToDate(""); }}>Clear filters</Button>
     </div>}
     {dateError && sessions.length > 0 && <p role="alert" className="form-error">{dateError}</p>}

@@ -18,9 +18,9 @@ const api = vi.hoisted(() => ({
   getActiveOrUpcoming: vi.fn(),
   getSession: vi.fn(),
   callNext: vi.fn(),
-  recall: vi.fn(),
   skip: vi.fn(),
   complete: vi.fn(),
+  completeAndCallNext: vi.fn(),
   markLate: vi.fn(),
   startSession: vi.fn(),
   pauseSession: vi.fn(),
@@ -127,19 +127,22 @@ describe("DoctorDashboard", () => {
     api.getActiveOrUpcoming.mockResolvedValue(fixture());
     render(<DoctorDashboard />);
     expect(
-      await screen.findByText("Good to see you, Dr Shah."),
+      await screen.findByRole("heading", { name: "Morning clinic" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("DigiLine Clinic")).toBeInTheDocument();
+    expect(screen.getByText(/Doctor dashboard · DigiLine Clinic/)).toBeInTheDocument();
+    const currentCard = screen.getByText("Queue ready").closest<HTMLDivElement>(".current-patient-panel")!;
+    expect(currentCard.compareDocumentPosition(screen.getByRole("heading", { name: "Patient queue" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(currentCard).getByRole("button", { name: "Call next" })).toBeEnabled();
     const rows = screen.getAllByRole("row").slice(1);
     expect(within(rows[0]).getByText("#1")).toBeInTheDocument();
     expect(within(rows[1]).getByText("#2")).toBeInTheDocument();
-    for (const header of ["Token", "Patient", "Age", "Phone", "Type", "Status", "Registered at", "Last called", "Late arrival", "Completed at", "Actions"])
+    for (const header of ["Token", "Patient", "Age", "Phone", "Type", "Status", "Registered at", "Called at", "Late arrival", "Completed at", "Actions"])
       expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
     expect(
-      screen.getByText("Ready to be called").previousElementSibling,
+      screen.getByText("Ready to call").previousElementSibling,
     ).toHaveTextContent("1");
     expect(
-      screen.getByText("Patients to review").previousElementSibling,
+      screen.getByText("After waiting patients").previousElementSibling,
     ).toHaveTextContent("1");
   });
 
@@ -168,7 +171,7 @@ describe("DoctorDashboard", () => {
     await waitFor(() =>
       expect(api.getSession).toHaveBeenCalledWith("session-1", undefined, 1, "Active"),
     );
-    expect(await screen.findByText("Now serving")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Token #1" })).toBeInTheDocument();
   });
 
   it("shows backend validation detail when an action is rejected", async () => {
@@ -205,6 +208,8 @@ describe("DoctorDashboard", () => {
     api.getSession.mockResolvedValue(completed);
     const user = userEvent.setup();
     render(<DoctorDashboard />);
+    expect(await screen.findByRole("heading", { name: "Token #1" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Call again/i })).not.toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Complete" }));
     expect(api.complete).not.toHaveBeenCalled();
     await user.click(
@@ -321,6 +326,58 @@ describe("DoctorDashboard", () => {
     await user.click(await screen.findByRole("button", { name: "Stop booking" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Stop booking" }));
     expect(await screen.findByText("Booking stopped. No new patients can join.")).toBeInTheDocument();
+  });
+
+  it("completes the current token and immediately shows the next called patient", async () => {
+    const before = fixture("Running", ["Called", "Waiting"]);
+    const after = fixture("Running", ["Completed", "Called"]);
+    api.getActiveOrUpcoming.mockResolvedValue(before);
+    api.completeAndCallNext.mockResolvedValue({
+      completedToken: { ...before.queue[0], status: "Completed", completedAt: "2026-08-19T08:10:00Z" },
+      calledToken: { ...after.queue[1], status: "Called" },
+    });
+    api.getSession.mockResolvedValue(after);
+    const user = userEvent.setup();
+    render(<ToastProvider><DoctorDashboard /></ToastProvider>);
+
+    expect(await screen.findByRole("button", { name: "Complete & call next" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Complete" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Call next" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Complete & call next" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Complete & call next" }));
+
+    await waitFor(() => expect(api.completeAndCallNext).toHaveBeenCalledWith("session-1", "token-1"));
+    expect(await screen.findByRole("heading", { name: "Token #2" })).toBeInTheDocument();
+    expect(screen.getByText("Token #1 completed. Token #2 called.")).toBeInTheDocument();
+  });
+
+  it("uses standalone Complete when the current patient is last", async () => {
+    api.getActiveOrUpcoming.mockResolvedValue(fixture("Running", ["Called"]));
+    render(<DoctorDashboard />);
+
+    expect(await screen.findByRole("button", { name: "Complete" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Complete & call next" })).not.toBeInTheDocument();
+  });
+
+  it("prioritizes the current patient and one primary next action", async () => {
+    api.getActiveOrUpcoming.mockResolvedValue(fixture("Running", ["Called", "Waiting"]));
+    render(<DoctorDashboard />);
+
+    const panel = (await screen.findByRole("heading", { name: "Token #1" })).closest<HTMLElement>(".current-patient-panel")!;
+    expect(within(panel).getByRole("heading", { name: "Token #1" })).toBeInTheDocument();
+    expect(within(panel).getByText("Patient 1")).toBeInTheDocument();
+    expect(within(panel).getByText("Called")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Complete & call next" })).toHaveClass("primary-queue-action");
+    expect(within(panel).getByRole("button", { name: "Not here—skip" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Call Again/i })).not.toBeInTheDocument();
+    expect(panel.compareDocumentPosition(screen.getByRole("heading", { name: "Patient queue" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("does not offer an unimplemented consultation action", async () => {
+    api.getActiveOrUpcoming.mockResolvedValue(fixture("Running", ["Called"]));
+    render(<DoctorDashboard />);
+    await screen.findByRole("heading", { name: "Token #1" });
+    expect(screen.queryByRole("button", { name: /Start consultation/i })).not.toBeInTheDocument();
   });
 
 });

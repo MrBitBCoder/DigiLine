@@ -108,6 +108,10 @@ export interface PublicBookingResult {
   tokenNumber: number;
   wasAlreadyBooked: boolean;
 }
+export interface CompleteAndCallNextResult {
+  completedToken: QueueToken;
+  calledToken: QueueToken | null;
+}
 export interface PublicTokenRecoveryResult {
   sessionId: string;
   tokenId: string;

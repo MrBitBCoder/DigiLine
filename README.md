@@ -5,8 +5,8 @@ DigiLine is a focused full-stack portfolio project for managing a live clinic qu
 ## Workflows
 
 - Patients verify a phone number, select or create a profile, join a clinic session, and watch their live queue position.
-- Receptionists register walk-ins and can recall, cancel, or mark tokens late.
-- Doctors create, start, pause, resume, stop bookings, and explicitly complete sessions, and can call, recall, skip, mark late, or complete tokens.
+- Receptionists register walk-ins and can cancel or mark tokens late.
+- Doctors create, start, pause, resume, stop bookings, and explicitly complete sessions, and can call, skip, mark late, or complete tokens.
 - SignalR updates all open views without a page refresh.
 - JWT roles and clinic/doctor ownership protect staff operations.
 
@@ -133,7 +133,10 @@ Resolve every collision with the affected clinic administrators. The migration
 intentionally fails if any remain; it will not guess which account to keep.
 # Staff queue actions
 
-**Call again** refreshes the last-called time for the current Called token.
+**Call Next** moves the next eligible Waiting or Late token to Called only when
+there is no current patient. It never completes the current token. Use
+**Complete & call next** to explicitly complete the current patient and advance
+the queue in one action, or **Complete** when no immediate advance is needed.
 **Not here—skip** releases that call and leaves the token visible as awaiting
 arrival. Staff can select **Patient arrived** on a Skipped token while the
 session is Running; this records `LateArrivedAt` in UTC and moves it to Late.

@@ -1,8 +1,9 @@
 namespace DigiLine.Application.Queue;
 
-public interface IRecallTokenService
+public interface ICancelPatientTokenService
 {
-    Task<QueueTokenListItem> RecallAsync(
+    Task<PublicTokenState?> CancelAsync(
+        string accessToken,
         Guid sessionId,
         Guid tokenId,
         CancellationToken cancellationToken = default);

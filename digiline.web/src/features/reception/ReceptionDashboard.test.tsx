@@ -15,7 +15,6 @@ const api = vi.hoisted(() => ({
   walkIn: vi.fn(),
   cancel: vi.fn(),
   markLate: vi.fn(),
-  recall: vi.fn(),
 }));
 const realtime = vi.hoisted(() => ({
   callback: null as null | (() => Promise<void> | void),
@@ -87,7 +86,12 @@ describe("ReceptionDashboard", () => {
     expect(await screen.findByText("Reception desk")).toBeInTheDocument();
     expect(screen.getByText("Doctor available")).toBeInTheDocument();
     expect(screen.getByText("9999999999")).toBeInTheDocument();
-    for (const header of ["Token", "Patient", "Age", "Phone", "Type", "Status", "Registered at", "Last called", "Late arrival", "Completed at", "Actions"])
+    expect(screen.queryByRole("button", { name: /Call again/i })).not.toBeInTheDocument();
+    const overview = screen.getByRole("region", { name: "Active session and queue summary" });
+    expect(within(overview).getByText("Current token")).toBeInTheDocument();
+    expect(within(overview).getByText("#3")).toBeInTheDocument();
+    expect(within(overview).getByText("Patient 3 · Age: — · Phone: —")).toBeInTheDocument();
+    for (const header of ["Token", "Patient", "Age", "Phone", "Type", "Status", "Registered at", "Called at", "Late arrival", "Completed at", "Actions"])
       expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
   });
   it("shows booked patient identity, age, and phone in queue details", async () => {
@@ -170,12 +174,12 @@ describe("ReceptionDashboard", () => {
     const before = fixture(); before.sessions[0].session.status = "BookingOpen";
     api.today.mockResolvedValue(before);
     render(<ReceptionDashboard />);
-    await waitFor(() => expect(document.querySelector(".reception-session-strip .status-badge")).toHaveTextContent("Booking open"));
+    await waitFor(() => expect(document.querySelector(".reception-active-panel .status-badge")).toHaveTextContent("Booking open"));
     const after = fixture(); after.sessions[0].session.status = "Closed"; after.sessions[0].session.isBookingOpen = false;
     api.today.mockResolvedValue(after);
     await act(async () => { await realtime.callback?.(); });
-    await waitFor(() => expect(document.querySelector(".reception-session-strip .status-badge")).toHaveTextContent("Completed"));
-    expect(document.querySelector(".reception-session-strip .status-badge")).not.toHaveClass("status-info");
+    await waitFor(() => expect(document.querySelector(".reception-active-panel .status-badge")).toHaveTextContent("Completed"));
+    expect(document.querySelector(".reception-active-panel .status-badge")).not.toHaveClass("status-info");
   });
 
 });

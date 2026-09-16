@@ -80,9 +80,4 @@ export const receptionApi = {
       `/api/reception/sessions/${sessionId}/tokens/${tokenId}/late`,
       { method: "POST" },
     ),
-  recall: (sessionId: string, tokenId: string) =>
-    request<QueueToken>(
-      `/api/reception/sessions/${sessionId}/tokens/${tokenId}/recall`,
-      { method: "POST" },
-    ),
 };

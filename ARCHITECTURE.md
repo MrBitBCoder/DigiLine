@@ -17,7 +17,7 @@ API ─────► Application ─────► Domain
 ## API surface
 
 - `/api/public/*`: clinic details, simulated phone verification, profiles, booking, and token status.
-- `/api/reception/*`: today’s sessions, walk-ins, recall, cancel, and late handling.
+- `/api/reception/*`: today’s sessions, walk-ins, cancellation, and late handling.
 - `/api/doctor/*`: doctor-scoped session queries, lifecycle transitions, and queue operations.
 - `/api/auth/*`: login, registration, invitation acceptance, and password recovery.
 - `/api/admin/*`: tenant-scoped clinic details, paginated staff management, invitations, and access changes.

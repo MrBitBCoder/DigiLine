@@ -32,7 +32,7 @@ export function DataTable<T>({
   const visibleRows = controlledPage !== undefined ? rows : rows.slice((page - 1) * pageSize, page * pageSize);
   return (
     <div className="table-container">
-    <div className="table-scroll">
+    <div className="table-scroll" tabIndex={0} aria-label={`${caption}, scroll horizontally when needed`}>
       <table className="data-table" role="table">
         <caption className="sr-only">{caption}</caption>
         <thead role="rowgroup">
@@ -41,6 +41,7 @@ export function DataTable<T>({
               <th
                 key={column.key}
                 className={column.align === "right" ? "align-right" : ""}
+                data-column-key={column.key}
                 scope="col"
                 role="columnheader"
               >
@@ -58,6 +59,7 @@ export function DataTable<T>({
                   className={column.align === "right" ? "align-right" : ""}
                   role="cell"
                   data-label={column.header}
+                  data-column-key={column.key}
                 >
                   {column.render(row)}
                 </td>

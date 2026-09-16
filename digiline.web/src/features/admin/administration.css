@@ -1,13 +1,39 @@
-.onboarding { max-width: 42rem; margin: 2rem auto; padding: 1rem; }
-.onboarding form, .administration form, .administration { display: grid; gap: 1rem; }
-.administration fieldset { display: flex; flex-wrap: wrap; gap: 1rem; }
-.check { display: flex; align-items: center; gap: .6rem; min-height: 44px; }
+.onboarding { width: 100%; }
+.onboarding-card { width: min(46rem, 100%); }
+.auth-card-heading h1 { margin: var(--space-1) 0 0; font-size: var(--text-page-title); line-height: 1.1; }
+.auth-card-heading p { margin: var(--space-2) 0 var(--space-5); color: var(--color-muted); }
+.onboarding form, .administration, .administration form { min-width: 0; display: grid; gap: var(--space-4); }
+.administration { overflow-wrap: anywhere; gap: var(--space-5); }
+.administration fieldset { min-inline-size: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+.administration label, .onboarding label, .administration input, .onboarding input { min-width: 0; max-width: 100%; }
+.check { min-height: var(--control-height); display: flex; align-items: center; gap: var(--space-2); }
 .check input { width: 20px; height: 20px; }
-.administration .row-actions { flex-wrap: wrap; }
-.onboarding input, .administration input { max-width: 100%; }
-@media (max-width: 600px) { .onboarding { margin: 0; } .administration fieldset { flex-direction: column; } }
-
-.administration, .administration form, .onboarding form { grid-template-columns: minmax(0, 1fr); }
-.administration fieldset, .administration label, .onboarding label { min-inline-size: 0; }
-.administration input, .onboarding input { min-width: 0; }
-.administration { overflow-wrap: anywhere; }
+.admin-card-heading h2, .staff-editor h2 { margin: var(--space-1) 0 0; font-size: var(--text-card-title); }
+.admin-card-heading > span, .staff-editor-heading p { color: var(--color-muted); font-size: var(--text-sm); }
+.staff-editor { width: min(52rem, 100%); }
+.staff-editor-heading { display: flex; align-items: end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); }
+.staff-editor-heading p { max-width: 24rem; margin: 0; text-align: right; }
+.admin-form-actions { grid-column: 1 / -1; }
+.clinic-settings form { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; padding: var(--space-4) var(--space-5); }
+.staff-identity { display: grid; gap: var(--space-1); }
+.staff-identity span { color: var(--color-muted); font-size: var(--text-sm); }
+.role-list { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.role-list span { padding: 0.2rem 0.5rem; border-radius: 999px; color: var(--color-primary-dark); background: var(--color-primary-soft); font-size: var(--text-xs); font-weight: 700; }
+.administration .row-actions { justify-content: flex-end; flex-wrap: wrap; }
+.administration .row-actions .ds-button { min-height: 2.5rem; padding: 0.5rem 0.75rem; }
+.staff-editor h2:focus { outline: 3px solid var(--color-primary); outline-offset: 0.2rem; border-radius: 0.15rem; }
+.onboarding-actions { align-items: center; }
+@media (max-width: 760px) {
+  .clinic-settings form { grid-template-columns: 1fr; }
+  .clinic-settings form .ds-button { justify-self: start; }
+}
+@media (max-width: 640px) {
+  .administration { gap: var(--space-4); }
+  .administration fieldset, .staff-editor-heading, .admin-card-heading { align-items: flex-start; flex-direction: column; }
+  .staff-editor-heading p { text-align: left; }
+  .onboarding-form, .staff-editor form, .clinic-settings form { grid-template-columns: 1fr; }
+  .onboarding-actions, .admin-form-actions { align-items: stretch; flex-direction: column; }
+  .onboarding-actions .ds-button, .admin-form-actions .ds-button, .clinic-settings form .ds-button { width: 100%; }
+  .administration .data-table td[data-column-key="staff"], .administration .data-table td[data-column-key="actions"] { align-items: flex-start; flex-direction: column; text-align: left; }
+  .administration .data-table td[data-column-key="actions"] .row-actions { width: 100%; justify-content: flex-start; }
+}

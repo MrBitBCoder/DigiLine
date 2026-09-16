@@ -34,32 +34,6 @@ public class QueueTokenWalkInTests
     }
 
     [Fact]
-    public void Recall_WhenCalled_RefreshesTimestampWithoutChangingStatus()
-    {
-        var token = new QueueToken(Guid.NewGuid(), 1, "Jane Doe", null);
-        var firstCall = DateTime.UtcNow.AddMinutes(-1);
-        var recalledAt = DateTime.UtcNow;
-        token.Call(firstCall);
-
-        token.Recall(recalledAt);
-
-        Assert.Equal(QueueTokenStatus.Called, token.Status);
-        Assert.Equal(recalledAt, token.CalledAt);
-    }
-
-    [Fact]
-    public void Recall_WhenWaiting_ThrowsWithoutSettingTimestamp()
-    {
-        var token = new QueueToken(Guid.NewGuid(), 1, "Jane Doe", null);
-
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            token.Recall(DateTime.UtcNow));
-
-        Assert.Equal("Only a called token can be recalled.", exception.Message);
-        Assert.Null(token.CalledAt);
-    }
-
-    [Fact]
     public void Skip_WhenCalled_TransitionsToSkippedAndPreservesCalledAt()
     {
         var token = new QueueToken(Guid.NewGuid(), 1, "Jane Doe", null);
@@ -134,6 +108,80 @@ public class QueueTokenWalkInTests
 
         Assert.Equal("Only a waiting token can be cancelled.", exception.Message);
         Assert.Equal(QueueTokenStatus.Called, token.Status);
+    }
+
+    [Theory]
+    [InlineData(QueueTokenStatus.Waiting)]
+    [InlineData(QueueTokenStatus.Skipped)]
+    [InlineData(QueueTokenStatus.Late)]
+    public void CancelByPatient_WhenStillAwaitingService_FinalizesExistingToken(
+        QueueTokenStatus status)
+    {
+        var token = TokenInStatus(status);
+        var tokenId = token.Id;
+        var tokenNumber = token.TokenNumber;
+        var queueOrder = token.QueueOrder;
+        var cancelledAt = DateTime.UtcNow;
+
+        token.CancelByPatient(cancelledAt);
+
+        Assert.Equal(QueueTokenStatus.Cancelled, token.Status);
+        Assert.Equal(cancelledAt, token.FinalizedAt);
+        Assert.Equal(tokenId, token.Id);
+        Assert.Equal(tokenNumber, token.TokenNumber);
+        Assert.Equal(queueOrder, token.QueueOrder);
+    }
+
+    [Theory]
+    [InlineData(QueueTokenStatus.Called)]
+    [InlineData(QueueTokenStatus.Completed)]
+    [InlineData(QueueTokenStatus.NoShow)]
+    public void CancelByPatient_WhenServiceStartedOrFinalized_Rejects(
+        QueueTokenStatus status)
+    {
+        var token = TokenInStatus(status);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            token.CancelByPatient(DateTime.UtcNow));
+
+        Assert.Equal("This token can no longer be cancelled.", exception.Message);
+        Assert.Equal(status, token.Status);
+        if (status != QueueTokenStatus.NoShow)
+            Assert.Null(token.FinalizedAt);
+    }
+
+    [Fact]
+    public void CancelByPatient_WhenAlreadyCancelled_ReturnsSpecificConflict()
+    {
+        var token = new QueueToken(Guid.NewGuid(), 1, Guid.NewGuid());
+        token.CancelByPatient(DateTime.UtcNow.AddMinutes(-1));
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            token.CancelByPatient(DateTime.UtcNow));
+
+        Assert.Equal("This token has already been cancelled.", exception.Message);
+    }
+
+    private static QueueToken TokenInStatus(QueueTokenStatus status)
+    {
+        var token = new QueueToken(Guid.NewGuid(), 8, Guid.NewGuid());
+        if (status == QueueTokenStatus.Waiting) return token;
+        token.Call(DateTime.UtcNow.AddMinutes(-5));
+        if (status == QueueTokenStatus.Called) return token;
+        if (status == QueueTokenStatus.Completed)
+        {
+            token.Complete(DateTime.UtcNow);
+            return token;
+        }
+        token.Skip();
+        if (status == QueueTokenStatus.Skipped) return token;
+        if (status == QueueTokenStatus.NoShow)
+        {
+            token.FinalizeNoShow(DateTime.UtcNow);
+            return token;
+        }
+        token.MarkLate();
+        return token;
     }
 
     [Fact]

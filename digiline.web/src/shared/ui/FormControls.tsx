@@ -25,8 +25,8 @@ function FieldShell({
 }: FieldShellProps) {
   const messageId = `${id}-message`;
   return (
-    <label className="field" htmlFor={id}>
-      <span>
+    <div className="field">
+      <label htmlFor={id}>
         {label}
         {required && (
           <span className="required" aria-hidden="true">
@@ -34,14 +34,14 @@ function FieldShell({
             *
           </span>
         )}
-      </span>
+      </label>
       {children}
       {(error || hint) && (
         <small id={messageId} className={error ? "field-error" : ""}>
           {error ?? hint}
         </small>
       )}
-    </label>
+    </div>
   );
 }
 
@@ -70,7 +70,7 @@ export function TextField({
       <input
         id={id}
         required={required}
-        aria-invalid={!!error}
+        aria-invalid={error ? true : undefined}
         aria-describedby={error || hint ? `${id}-message` : undefined}
         {...props}
       />
@@ -103,7 +103,7 @@ export function SelectField({
       <select
         id={id}
         required={required}
-        aria-invalid={!!error}
+        aria-invalid={error ? true : undefined}
         aria-describedby={error || hint ? `${id}-message` : undefined}
         {...props}
       >
@@ -137,7 +137,7 @@ export function TextAreaField({
       <textarea
         id={id}
         required={required}
-        aria-invalid={!!error}
+        aria-invalid={error ? true : undefined}
         aria-describedby={error || hint ? `${id}-message` : undefined}
         {...props}
       />

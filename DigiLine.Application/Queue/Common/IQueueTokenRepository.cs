@@ -17,6 +17,11 @@ namespace DigiLine.Application.Queue
             Guid sessionId,
             CancellationToken cancellationToken = default);
 
+        Task<QueueToken?> GetCurrentForUpdateAsync(
+            Guid sessionId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<QueueToken?>(null);
+
         Task<QueueToken?> GetByIdAsync(
             Guid sessionId,
             Guid tokenId,

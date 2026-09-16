@@ -4,6 +4,7 @@ import type {
   DoctorSessionDetails,
   DoctorSessionSummary,
   QueueToken,
+  CompleteAndCallNextResult,
   QueueTokenStatus,
   SessionStatus,
 } from "../../shared/types/domain";
@@ -80,11 +81,6 @@ export const doctorApi = {
     request<QueueToken>(`/api/doctor/sessions/${sessionId}/queue/call-next`, {
       method: "POST",
     }),
-  recall: (sessionId: string, tokenId: string) =>
-    request<QueueToken>(
-      `/api/doctor/sessions/${sessionId}/tokens/${tokenId}/recall`,
-      { method: "POST" },
-    ),
   skip: (sessionId: string, tokenId: string) =>
     request<QueueToken>(
       `/api/doctor/sessions/${sessionId}/tokens/${tokenId}/skip`,
@@ -95,6 +91,16 @@ export const doctorApi = {
       `/api/doctor/sessions/${sessionId}/tokens/${tokenId}/complete`,
       { method: "POST" },
     ),
+  completeAndCallNext: async (sessionId: string, tokenId: string) => {
+    const result = await request<CompleteAndCallNextResult>(
+      `/api/doctor/sessions/${sessionId}/tokens/${tokenId}/complete-and-call-next`,
+      { method: "POST" },
+    );
+    return {
+      completedToken: normalizeToken(result.completedToken),
+      calledToken: result.calledToken ? normalizeToken(result.calledToken) : null,
+    };
+  },
   markLate: (sessionId: string, tokenId: string) =>
     request<QueueToken>(
       `/api/doctor/sessions/${sessionId}/tokens/${tokenId}/late`,

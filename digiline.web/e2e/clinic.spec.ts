@@ -11,19 +11,54 @@ async function signIn(page: Page) {
   await page.getByLabel(/^Password/).fill(process.env.DIGILINE_E2E_PASSWORD ?? "VerificationOnly123!"); await page.getByRole("button", { name:"Sign in", exact:true }).click();
   await expect(page.getByRole("heading", { name:"Clinic administration" })).toBeVisible();
 }
-for (const width of [360,390,768]) {
+for (const width of [320,375,390,430,768]) {
   test(`accessible principal screens at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height:900 }); await page.goto("/register"); await audit(page);
     await page.screenshot({ path:`test-results/register-${width}.png`, fullPage:true });
-    await signIn(page); await audit(page); await page.screenshot({ path:`test-results/admin-${width}.png`, fullPage:true });
+    await signIn(page);
+    if (width < 768) {
+      const menu = page.getByRole("button", { name: "Menu" });
+      await expect(menu).toBeVisible();
+      await expect(menu).toHaveAttribute("aria-expanded", "false");
+      await menu.click();
+      await expect(page.getByRole("button", { name: "Close menu" })).toHaveAttribute("aria-expanded", "true");
+      await page.keyboard.press("Escape");
+      await expect(menu).toBeFocused();
+      await menu.click();
+    }
+    await audit(page); await page.screenshot({ path:`test-results/admin-${width}.png`, fullPage:true });
+    await expect(page.getByRole("button", { name: "Add staff" })).toBeVisible();
+    await expect(page.getByRole("table", { name: "Clinic staff" })).toBeAttached();
     await page.getByRole("link", { name:"Doctor dashboard", exact:true }).click();
     await expect(page.getByRole("heading", { name:"Patient queue" })).toBeVisible(); await audit(page);
     await expect(page.getByRole("columnheader").first()).toBeAttached();
     await page.screenshot({ path:`test-results/doctor-${width}.png`, fullPage:true });
+    if (width < 768) await page.getByRole("button", { name: "Menu" }).click();
+    await page.getByRole("link", { name:"Sessions", exact:true }).click();
+    await expect(page.getByRole("heading", { name:"Sessions", exact:true })).toBeVisible();
+    await expect(page.getByRole("button", { name:"Add session" })).toBeVisible();
+    await expect(page.getByRole("columnheader").first()).toBeAttached(); await audit(page);
+    if (width < 768) await page.getByRole("button", { name: "Menu" }).click();
     await page.getByRole("link", { name:"Reception", exact:true }).click();
     await expect(page.getByRole("heading", { name:"Reception desk" })).toBeVisible(); await audit(page);
   });
 }
+test("desktop operational content starts within the initial viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signIn(page);
+  const staffTable = await page.getByRole("table", { name: "Clinic staff" }).boundingBox();
+  expect(staffTable?.y).toBeLessThan(900);
+
+  await page.getByRole("link", { name:"Doctor dashboard", exact:true }).click();
+  const currentToken = await page.locator(".current-patient-panel").boundingBox();
+  const queueHeading = await page.getByRole("heading", { name:"Patient queue" }).boundingBox();
+  expect(currentToken?.y).toBeLessThan(900);
+  expect(queueHeading?.y).toBeLessThan(900);
+
+  await page.getByRole("link", { name:"Sessions", exact:true }).click();
+  const sessionTable = await page.getByRole("table", { name:"Your sessions" }).boundingBox();
+  expect(sessionTable?.y).toBeLessThan(900);
+});
 test("keyboard registration, role navigation, and explicit completion", async ({ page }) => {
   const suffix = Date.now().toString(); await page.goto("/register");
   await page.getByLabel(/^Clinic name/).fill("Journey Clinic"); await page.getByLabel(/^Clinic address/).fill(`journey-${suffix}`);
@@ -84,19 +119,23 @@ test("doctor navigation exposes one current page and moves focus into routed con
     return route.fulfill({ json: { items: [summary], page: 1, pageSize: 10, totalCount: 1 } });
   });
   await page.goto("/doctor/sessions");
+  await expect(page.getByRole("heading", { name: "Sessions", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "Menu" }).click();
   const dashboardLink = page.getByRole("link", { name: "Doctor dashboard", exact: true });
   const sessionsLink = page.getByRole("link", { name: "Sessions", exact: true });
   await expect(sessionsLink).toHaveAttribute("aria-current", "page");
   await expect(dashboardLink).not.toHaveAttribute("aria-current");
-  await expect(page.getByRole("heading", { name: "Sessions", exact: true })).toBeFocused();
   await audit(page);
+  await page.getByRole("button", { name: "Close menu" }).click();
 
   await page.getByRole("button", { name: "View queue" }).first().click();
   await expect(page).toHaveURL(/\/doctor\?session=/);
+  await expect(page.locator("main h1")).toBeFocused();
+  await page.getByRole("button", { name: "Menu" }).click();
   await expect(dashboardLink).toHaveAttribute("aria-current", "page");
   await expect(sessionsLink).not.toHaveAttribute("aria-current");
-  await expect(page.locator("main h1")).toBeFocused();
   await audit(page);
+  await page.getByRole("button", { name: "Close menu" }).click();
 
   const stopBooking = page.getByRole("button", { name: "Stop booking", exact: true });
   await stopBooking.click();
@@ -106,11 +145,31 @@ test("doctor navigation exposes one current page and moves focus into routed con
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await expect(stopBooking).toBeFocused();
 
+  await page.getByRole("button", { name: "Menu" }).click();
   await sessionsLink.focus();
   await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Sessions", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "Menu" }).click();
   await expect(sessionsLink).toHaveAttribute("aria-current", "page");
   await expect(dashboardLink).not.toHaveAttribute("aria-current");
-  await expect(page.getByRole("heading", { name: "Sessions", exact: true })).toBeFocused();
+
+  await page.getByRole("button", { name: "Close menu" }).click();
+  for (const width of [320, 375, 390, 430, 768, 1366]) {
+    await page.setViewportSize({ width, height: 900 });
+    await audit(page);
+    const menu = page.getByRole("button", { name: "Menu" });
+    if (width < 768) {
+      await expect(menu).toBeVisible();
+      await menu.click();
+      await audit(page);
+      await page.getByRole("button", { name: "Close menu" }).click();
+    } else {
+      await expect(menu).toBeHidden();
+      await expect(page.getByRole("link", { name: "Sessions", exact: true })).toBeVisible();
+    }
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(page.locator(".ds-button").first()).toHaveCSS("transition-duration", "0s");
 });
 test("layout remains usable at 200 percent zoom", async ({ page }) => {
   await page.setViewportSize({ width:768,height:900 }); await signIn(page);

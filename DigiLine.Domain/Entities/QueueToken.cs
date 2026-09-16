@@ -126,15 +126,6 @@ namespace DigiLine.Domain.Entities
             if (queueOrder.HasValue) AssignQueueOrder(queueOrder.Value);
         }
 
-        public void Recall(DateTime recalledAt)
-        {
-            if (Status != QueueTokenStatus.Called)
-                throw new InvalidOperationException(
-                    "Only a called token can be recalled.");
-
-            CalledAt = recalledAt;
-        }
-
         public void Skip()
         {
             if (Status != QueueTokenStatus.Called)
@@ -171,6 +162,22 @@ namespace DigiLine.Domain.Entities
                     "Only a waiting token can be cancelled.");
 
             Status = QueueTokenStatus.Cancelled;
+        }
+
+        public void CancelByPatient(DateTime cancelledAt)
+        {
+            if (Status == QueueTokenStatus.Cancelled)
+                throw new InvalidOperationException(
+                    "This token has already been cancelled.");
+
+            if (Status is not QueueTokenStatus.Waiting
+                and not QueueTokenStatus.Late
+                and not QueueTokenStatus.Skipped)
+                throw new InvalidOperationException(
+                    "This token can no longer be cancelled.");
+
+            Status = QueueTokenStatus.Cancelled;
+            FinalizedAt = cancelledAt;
         }
     }
 }

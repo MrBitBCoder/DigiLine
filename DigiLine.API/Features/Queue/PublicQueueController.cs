@@ -11,7 +11,12 @@ namespace DigiLine.API.Features.Queue;
 public sealed class PublicQueueController : ControllerBase
 {
     private readonly IPublicQueueService _queue;
-    public PublicQueueController(IPublicQueueService queue) => _queue = queue;
+    private readonly ICancelPatientTokenService _cancellation;
+    public PublicQueueController(IPublicQueueService queue, ICancelPatientTokenService cancellation)
+    {
+        _queue = queue;
+        _cancellation = cancellation;
+    }
 
     [HttpPost("book")]
     public async Task<IActionResult> Book(PublicBookingRequest request, [FromHeader(Name = "X-Patient-Access")] string accessToken, CancellationToken cancellationToken) =>
@@ -31,6 +36,18 @@ public sealed class PublicQueueController : ControllerBase
     {
         var token = await _queue.GetTokenAsync(accessToken, sessionId, tokenId, cancellationToken);
         return token is null ? NotFound() : Ok(token);
+    }
+
+    [HttpPost("sessions/{sessionId:guid}/tokens/{tokenId:guid}/cancel"), EnableRateLimiting("patient-token-action")]
+    public async Task<IActionResult> CancelToken(Guid sessionId, Guid tokenId,
+        [FromHeader(Name = "X-Patient-Access")] string accessToken,
+        CancellationToken cancellationToken)
+    {
+        var token = await _cancellation.CancelAsync(accessToken, sessionId, tokenId, cancellationToken);
+        return token is null
+            ? Problem(statusCode: StatusCodes.Status404NotFound, title: "Token not found.",
+                detail: "We couldn't find this token for your verified patient account.")
+            : Ok(token);
     }
 }
 
