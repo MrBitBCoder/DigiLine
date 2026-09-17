@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { DoctorSessionSummary } from "../../shared/types/domain";
 import { SessionManager } from "./SessionManager";
 import { ToastProvider } from "../../shared/ui";
@@ -8,10 +8,14 @@ import { ToastProvider } from "../../shared/ui";
 const api = vi.hoisted(() => ({ listSessions: vi.fn(), clinicTimeZone: vi.fn(), updateSession: vi.fn(), deleteSession: vi.fn(), createSession: vi.fn() }));
 vi.mock("./doctorApi", () => ({ doctorApi: api }));
 
-const start = new Date(Date.now() + 3_600_000);
+const TEST_NOW = new Date("2026-09-17T12:00:00.000Z");
+const BOOKING_OPEN_LOCAL = "2026-09-17T18:30";
+const START_LOCAL = "2026-09-17T19:30";
+const END_LOCAL = "2026-09-17T21:30";
+const start = new Date(TEST_NOW.getTime() + 3_600_000);
 const session: DoctorSessionSummary = {
   id: "session-1", clinicId: "clinic-1", clinicName: "Clinic", doctorId: "doctor-1", doctorName: "Doctor",
-  name: "Morning session", bookingOpenTime: new Date().toISOString(), startTime: start.toISOString(),
+  name: "Morning session", bookingOpenTime: TEST_NOW.toISOString(), startTime: start.toISOString(),
   endTime: new Date(start.getTime() + 3_600_000).toISOString(), lastBookingTime: new Date(start.getTime() + 3_600_000).toISOString(),
   averageConsultationMinutes: 10, status: "BookingOpen", isBookingOpen: true,
   queueSummary: { currentToken: null, waitingCount: 0, lateCount: 0, totalCount: 0, completedCount: 0, notAttendedCount: 0 },
@@ -19,7 +23,15 @@ const session: DoctorSessionSummary = {
 
 const paged = (items: DoctorSessionSummary[]) => ({ items, page: 1, pageSize: 10, totalCount: items.length });
 
-beforeEach(() => { Object.values(api).forEach(mock => mock.mockReset()); api.listSessions.mockResolvedValue(paged([session])); api.clinicTimeZone.mockResolvedValue({ timeZoneId: "Asia/Kolkata" }); });
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(TEST_NOW);
+  Object.values(api).forEach(mock => mock.mockReset());
+  api.listSessions.mockResolvedValue(paged([session]));
+  api.clinicTimeZone.mockResolvedValue({ timeZoneId: "Asia/Kolkata" });
+});
+
+afterEach(() => { vi.useRealTimers(); });
 
 it("shows aggregate attendance without patient details", async () => {
   api.listSessions.mockResolvedValue(paged([{ ...session, queueSummary: { ...session.queueSummary, totalCount: 5, completedCount: 2, notAttendedCount: 1 } }]));
@@ -110,9 +122,8 @@ it("creates a session and opens its queue", async () => {
 
   await user.click(await screen.findByRole("button", { name: "Add session" }));
   await user.type(screen.getByLabelText(/Session name/), "Afternoon clinic");
-  const localValue = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: localValue(new Date(Date.now() + 7_200_000)) } });
-  fireEvent.change(screen.getByLabelText(/End time/), { target: { value: localValue(new Date(Date.now() + 14_400_000)) } });
+  fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: START_LOCAL } });
+  fireEvent.change(screen.getByLabelText(/End time/), { target: { value: END_LOCAL } });
   await user.click(screen.getByRole("button", { name: "Create session" }));
   await waitFor(() => expect(api.createSession).toHaveBeenCalled());
   expect(api.createSession).toHaveBeenCalledWith(expect.objectContaining({ bookingOpenTime: null }));
@@ -125,15 +136,13 @@ it("sends a scheduled booking-open time in UTC", async () => {
   const user = userEvent.setup();
   render(<SessionManager onSelect={vi.fn().mockResolvedValue(undefined)} onDeleted={vi.fn()} />);
   await user.click(await screen.findByRole("button", { name: "Add session" }));
-  const localValue = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  const opening = localValue(new Date(Date.now() + 3_600_000));
   fireEvent.change(screen.getByLabelText(/Session name/), { target: { value: "Later clinic" } });
-  fireEvent.change(screen.getByLabelText(/Booking opens/), { target: { value: opening } });
-  fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: localValue(new Date(Date.now() + 7_200_000)) } });
-  fireEvent.change(screen.getByLabelText(/End time/), { target: { value: localValue(new Date(Date.now() + 14_400_000)) } });
+  fireEvent.change(screen.getByLabelText(/Booking opens/), { target: { value: BOOKING_OPEN_LOCAL } });
+  fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: START_LOCAL } });
+  fireEvent.change(screen.getByLabelText(/End time/), { target: { value: END_LOCAL } });
   await user.click(screen.getByRole("button", { name: "Create session" }));
 
-  await waitFor(() => expect(api.createSession).toHaveBeenCalledWith(expect.objectContaining({ bookingOpenTime: new Date(opening).toISOString() })));
+  await waitFor(() => expect(api.createSession).toHaveBeenCalledWith(expect.objectContaining({ bookingOpenTime: "2026-09-17T13:00:00.000Z" })));
 });
 
 it("rejects a booking-open time after session start", async () => {
@@ -141,12 +150,10 @@ it("rejects a booking-open time after session start", async () => {
   const user = userEvent.setup();
   render(<SessionManager onSelect={vi.fn()} onDeleted={vi.fn()} />);
   await user.click(await screen.findByRole("button", { name: "Add session" }));
-  const localValue = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  const startValue = localValue(new Date(Date.now() + 7_200_000));
   fireEvent.change(screen.getByLabelText(/Session name/), { target: { value: "Later clinic" } });
-  fireEvent.change(screen.getByLabelText(/Booking opens/), { target: { value: localValue(new Date(Date.now() + 10_800_000)) } });
-  fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: startValue } });
-  fireEvent.change(screen.getByLabelText(/End time/), { target: { value: localValue(new Date(Date.now() + 14_400_000)) } });
+  fireEvent.change(screen.getByLabelText(/Booking opens/), { target: { value: "2026-09-17T20:30" } });
+  fireEvent.change(screen.getByLabelText(/Start time/), { target: { value: START_LOCAL } });
+  fireEvent.change(screen.getByLabelText(/End time/), { target: { value: END_LOCAL } });
   await user.click(screen.getByRole("button", { name: "Create session" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Booking must open before the session starts.");
   expect(api.createSession).not.toHaveBeenCalled();
