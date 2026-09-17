@@ -1,4 +1,13 @@
-# Verification record — 15 September 2026
+# Verification records
+## Portfolio snapshot — 17 September 2026
+
+The status-standardization frontend run passed 165 tests across 21 files, ESLint, and the TypeScript/Vite production build. This is the latest recorded frontend result, not a new backend certification.
+
+The preceding responsive browser run on 16 September passed 10 deterministic tests covering authentication, administration, patient, doctor, Sessions, Reception, and navigation. Nine live cases failed at login/registration before reaching their target screens. API/realtime fetch failures were observed; the live environment was not fully diagnosed. Those cases remain unverified for that run. The historical successful live checks below are retained with their original date and scope.
+
+Patient phone verification remains simulated. Development exposes the challenge code and no SMS provider proves phone ownership. Challenges and access tickets live in memory; restarting the API invalidates them. These limitations also apply to recovery/cancellation identity assurance.
+
+## Historical record — 15 September 2026
 
 ## Final mobile and frontend checks
 

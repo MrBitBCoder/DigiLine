@@ -4,7 +4,7 @@
 
 Set `ASPNETCORE_ENVIRONMENT=Production`, `ConnectionStrings__DigiLine`, a strong secret `JwtSettings__SecretKey`, and the frontend origin in `Cors__AllowedOrigins__0`. Configure the frontend `VITE_API_BASE_URL` for that API. Serve the application over HTTPS. Do not commit credentials. Production registration requires no development seeds: visit `/register`, enter clinic details and owner credentials, and optionally select **I also practice here**. The active owner is signed in immediately.
 
-Clinic time zones govern scheduling and date filters; timestamps are stored in UTC. Existing clinics default to `ClinicTime__DefaultTimeZoneId` (normally Asia/Kolkata). Review the existing-time audit in the root README before correcting historical timestamps.
+Clinic time zones govern scheduling and date filters; timestamps are stored in UTC. Existing clinics default to `ClinicTime__DefaultTimeZoneId` (normally Asia/Kolkata). Review the [existing-time audit](local-development.md#clinic-time-and-existing-data-audit) before correcting historical timestamps.
 
 ## Staff creation and legacy invitations
 
@@ -18,13 +18,13 @@ Accounts belong to one clinic and emails are globally unique. Admin, Doctor, and
 
 ## Stop booking and complete a session
 
-The owning doctor can permanently **Stop booking** on any noncompleted session. Public and walk-in bookings then fail, while start/pause/resume and queue work remain available. Automatic booking cutoffs also stop admission; neither the cutoff nor scheduled end completes a session.
+The owning doctor can permanently **Stop booking** only after starting a session, while it is Running or Paused. Public and walk-in bookings then fail, while pause/resume and queue work remain available. Automatic booking cutoffs also stop admission; neither the cutoff nor scheduled end completes a session.
 
 Completion requires a Running or Paused session whose bookings have stopped manually or reached their cutoff. Resolve every Waiting, Called, InConsultation, and Late token first. Call Next retains Waiting-before-Late ordering. Skipped tokens can be marked arrived while Running and served as Late. The completion dialog shows the remaining Skipped count; explicit confirmation turns those tokens into NoShow and completes the session atomically. NoShow finalization does not set a completed-consultation timestamp. Completed sessions are read-only. Repeated completion/stop requests are safe; the legacy `/close` endpoint uses the same guards.
 
 ## Schema rollout and historical review
 
-Back up the database and test the migration chain on a copy first. Resolve globally normalized staff-email collisions using the README report. Apply all pending migrations with:
+Back up the database and test the migration chain on a copy first. Resolve globally normalized staff-email collisions using the [staff-email collision report](local-development.md#staff-password-recovery). Apply all pending migrations with:
 
 ```powershell
 dotnet ef database update --project DigiLine.Infrastructure --startup-project DigiLine.API
