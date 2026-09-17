@@ -8,6 +8,7 @@ using DigiLine.Infrastructure.Authentication;
 using DigiLine.Infrastructure.Persistence;
 using DigiLine.Infrastructure.Persistence.Repositories;
 using DigiLine.Infrastructure.Persistence.Transactions;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -165,7 +166,17 @@ public sealed class ProductionWorkflowTests : IClassFixture<ProductionWorkflowTe
     }
     public sealed class Database:IAsyncLifetime
     {
-        private readonly string connection="Server=localhost;Database=DigiLine_Verification_Integration_"+Guid.NewGuid().ToString("N")+";Trusted_Connection=True;TrustServerCertificate=True;Connect Timeout=5";
+        private readonly string connection=CreateConnection();
+        private static string CreateConnection()
+        {
+            var database = "DigiLine_Verification_Integration_"+Guid.NewGuid().ToString("N");
+            var configured = Environment.GetEnvironmentVariable("DIGILINE_TEST_CONNECTION");
+            if (string.IsNullOrWhiteSpace(configured))
+                return $"Server=localhost;Database={database};Trusted_Connection=True;TrustServerCertificate=True;Connect Timeout=5";
+
+            var builder = new SqlConnectionStringBuilder(configured) { InitialCatalog = database };
+            return builder.ConnectionString;
+        }
         public DigiLineDbContext Open()=>new(new DbContextOptionsBuilder<DigiLineDbContext>().UseSqlServer(connection).Options);
         public async Task InitializeAsync(){await using var db=Open();await db.Database.MigrateAsync();}
         public Task DisposeAsync()=>Task.CompletedTask;

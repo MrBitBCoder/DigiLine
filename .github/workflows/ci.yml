@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DIGILINE_TEST_CONNECTION: Server=localhost,1433;Database=DigiLineDb;User ID=sa;Password=DigiLine_CI_2026_Strong!;Encrypt=False;TrustServerCertificate=True;Connect Timeout=15
+      ConnectionStrings__DigiLine: Server=localhost,1433;Database=DigiLineDb;User ID=sa;Password=DigiLine_CI_2026_Strong!;Encrypt=False;TrustServerCertificate=True;Connect Timeout=15
+      ASPNETCORE_ENVIRONMENT: Development
+      JwtSettings__Issuer: DigiLine.CI
+      JwtSettings__Audience: DigiLine.CI
+      JwtSettings__SecretKey: DigiLine.CI.SecretKey.AtLeast32Characters.Long
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: DigiLine_CI_2026_Strong!
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore backend projects
+        run: |
+          dotnet restore DigiLine.Domain.Tests/DigiLine.Domain.Tests.csproj
+          dotnet restore DigiLine.Application.Tests/DigiLine.Application.Tests.csproj
+          dotnet restore DigiLine.Infrastructure.Tests/DigiLine.Infrastructure.Tests.csproj
+          dotnet restore DigiLine.API.Tests/DigiLine.API.Tests.csproj
+
+      - name: Build API
+        run: dotnet build DigiLine.API/DigiLine.API.csproj --configuration Release --no-restore
+
+      - name: Run domain and application tests
+        run: |
+          dotnet test DigiLine.Domain.Tests/DigiLine.Domain.Tests.csproj --configuration Release --no-restore
+          dotnet test DigiLine.Application.Tests/DigiLine.Application.Tests.csproj --configuration Release --no-restore
+
+      - name: Wait for SQL Server
+        shell: bash
+        run: |
+          for attempt in {1..60}; do
+            if (echo > /dev/tcp/127.0.0.1/1433) >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "SQL Server did not become ready." >&2
+          exit 1
+
+      - name: Migrate and seed integration database
+        shell: bash
+        run: |
+          api_log="$RUNNER_TEMP/digiline-api.log"
+          dotnet run --project DigiLine.API/DigiLine.API.csproj \
+            --configuration Release --no-build \
+            --urls http://127.0.0.1:5017 >"$api_log" 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:5017/swagger/v1/swagger.json >/dev/null; then
+              kill "$api_pid"
+              wait "$api_pid" || true
+              trap - EXIT
+              exit 0
+            fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          cat "$api_log"
+          echo "DigiLine API did not migrate and seed the integration database." >&2
+          exit 1
+
+      - name: Run infrastructure and API tests
+        run: |
+          dotnet test DigiLine.Infrastructure.Tests/DigiLine.Infrastructure.Tests.csproj --configuration Release --no-restore
+          dotnet test DigiLine.API.Tests/DigiLine.API.Tests.csproj --configuration Release --no-restore
+
+  frontend:
+    name: Frontend tests, lint, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: digiline.web
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: digiline.web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Build production bundle
+        run: npm run build

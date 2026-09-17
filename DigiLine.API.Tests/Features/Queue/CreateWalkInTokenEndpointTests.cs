@@ -6,6 +6,7 @@ using DigiLine.Infrastructure.Authentication;
 using DigiLine.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -178,12 +179,24 @@ public sealed class CreateWalkInTokenEndpointTests : IClassFixture<CreateWalkInT
         public HttpClient Doctor { get; private set; }=null!;
         public HttpClient Reception { get; private set; }=null!;
         private readonly string database="DigiLine_Verification_Api_"+Guid.NewGuid().ToString("N");
+        private string ConnectionString
+        {
+            get
+            {
+                var configured = Environment.GetEnvironmentVariable("DIGILINE_TEST_CONNECTION");
+                if (string.IsNullOrWhiteSpace(configured))
+                    return $"Server=localhost;Database={database};Trusted_Connection=True;TrustServerCertificate=True;Connect Timeout=5";
+
+                var builder = new SqlConnectionStringBuilder(configured) { InitialCatalog = database };
+                return builder.ConnectionString;
+            }
+        }
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Production");
-            builder.UseSetting("ConnectionStrings:DigiLine", $"Server=localhost;Database={database};Trusted_Connection=True;TrustServerCertificate=True;Connect Timeout=5");
+            builder.UseSetting("ConnectionStrings:DigiLine", ConnectionString);
             builder.ConfigureAppConfiguration((_, configuration)=>configuration.AddInMemoryCollection(new Dictionary<string,string?> {
-                ["ConnectionStrings:DigiLine"]=$"Server=localhost;Database={database};Trusted_Connection=True;TrustServerCertificate=True;Connect Timeout=5",
+                ["ConnectionStrings:DigiLine"]=ConnectionString,
                 ["JwtSettings:Issuer"]="DigiLine.Tests",["JwtSettings:Audience"]="DigiLine.Tests",["JwtSettings:SecretKey"]="DigiLine.Tests.SecretKey.AtLeast32Characters",["PasswordReset:PublicBaseUrl"]="https://localhost",["Logging:LogLevel:Default"]="Warning"
             }));
             builder.ConfigureServices(services=>{ services.RemoveAll<IStaffEmailSender>();services.AddSingleton<IStaffEmailSender>(Mail); });

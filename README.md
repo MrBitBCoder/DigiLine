@@ -1,5 +1,7 @@
 # DigiLine
 
+[![CI](https://github.com/MrBitBCoder/DigiLine/actions/workflows/ci.yml/badge.svg)](https://github.com/MrBitBCoder/DigiLine/actions/workflows/ci.yml)
+
 A full-stack portfolio project for managing clinic queues. Patients can see their token and the current serving number, while doctors and reception staff control admissions and patient flow.
 
 **Demo limitation:** patient phone verification is simulated. Development displays the code, and no real SMS delivery proves ownership of a phone number. Replace this mechanism before using real patient data.
