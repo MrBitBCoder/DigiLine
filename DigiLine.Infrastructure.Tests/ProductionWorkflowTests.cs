@@ -89,7 +89,7 @@ public sealed class ProductionWorkflowTests : IClassFixture<ProductionWorkflowTe
     {
         var suffix=Guid.NewGuid().ToString("N");
         async Task<bool> Register(){await using var db=database.Open();try{await Admin(db).RegisterAsync(new("Duplicate",suffix,"Asia/Kolkata","Owner",$"{suffix}@example.test",Password,false),default);return true;}catch(DigiLine.Application.Common.ApplicationConflictException){return false;}}
-        var results=await Task.WhenAll(Register(),Register());Assert.Single(results.Where(x=>x));
+        var results=await Task.WhenAll(Register(),Register());Assert.Single(results,x=>x);
     }
     [Fact]
     public async Task SimultaneousAdminRemovalCannotRemoveLastAdministrator()
@@ -97,7 +97,7 @@ public sealed class ProductionWorkflowTests : IClassFixture<ProductionWorkflowTe
         var f=await Fixture();Guid second;
         await using(var db=database.Open()){var staff=new Staff(f.Clinic,"Other",$"{Guid.NewGuid()}@example.test","hash",StaffRole.Admin);db.Staff.Add(staff);await db.SaveChangesAsync();second=staff.Id;}
         async Task<bool> Remove(Guid id,StaffRole[] roles){await using var db=database.Open();try{await Admin(db).UpdateAsync(f.Clinic,f.Owner,id,new("Changed",roles,true),default);return true;}catch(ArgumentException){return false;}}
-        var result=await Task.WhenAll(Remove(f.Owner,[StaffRole.Doctor]),Remove(second,[StaffRole.Receptionist]));Assert.Single(result.Where(x=>x));
+        var result=await Task.WhenAll(Remove(f.Owner,[StaffRole.Doctor]),Remove(second,[StaffRole.Receptionist]));Assert.Single(result,x=>x);
         await using var check=database.Open();Assert.Equal(1,await check.Staff.CountAsync(x=>x.ClinicId==f.Clinic && x.IsActive && x.Roles.Any(r=>r.Role==StaffRole.Admin)));
     }
     [Fact]

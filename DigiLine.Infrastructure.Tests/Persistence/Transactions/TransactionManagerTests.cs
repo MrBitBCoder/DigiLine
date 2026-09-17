@@ -41,11 +41,25 @@ namespace DigiLine.Infrastructure.Tests
         {
             await using var dbContext = CreateDbContext();
 
-            var session = await dbContext.Sessions
+            var existingSession = await dbContext.Sessions
                 .OrderBy(x => x.CreatedAt)
                 .FirstOrDefaultAsync();
 
-            Assert.NotNull(session);
+            Assert.NotNull(existingSession);
+
+            var now = DateTime.UtcNow;
+            var session = new DigiLine.Domain.Entities.Session(
+                existingSession.ClinicId,
+                existingSession.DoctorId,
+                "Rollback Test",
+                now.AddMinutes(-30),
+                now.AddMinutes(30),
+                now.AddHours(2),
+                now.AddHours(1),
+                10);
+
+            await dbContext.Sessions.AddAsync(session);
+            await dbContext.SaveChangesAsync();
 
             var originalNextTokenNumber = session.NextTokenNumber;
 
@@ -77,6 +91,9 @@ namespace DigiLine.Infrastructure.Tests
             Assert.Equal(
                 originalNextTokenNumber,
                 nextTokenNumberAfterRollback);
+
+            dbContext.Sessions.Remove(session);
+            await dbContext.SaveChangesAsync();
         }
     }
 }

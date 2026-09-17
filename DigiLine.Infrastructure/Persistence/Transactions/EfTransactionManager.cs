@@ -24,17 +24,21 @@ namespace DigiLine.Infrastructure.Persistence.Transactions
                 await _dbContext.Database.BeginTransactionAsync(
                     cancellationToken);
 
-            return new EfTransaction(transaction);
+            return new EfTransaction(transaction, _dbContext);
         }
 
         private sealed class EfTransaction : ITransaction
         {
             private readonly IDbContextTransaction _transaction;
+            private readonly DigiLineDbContext _dbContext;
             private bool _disposed;
 
-            public EfTransaction(IDbContextTransaction transaction)
+            public EfTransaction(
+                IDbContextTransaction transaction,
+                DigiLineDbContext dbContext)
             {
                 _transaction = transaction;
+                _dbContext = dbContext;
             }
 
             public async Task CommitAsync(
@@ -48,6 +52,8 @@ namespace DigiLine.Infrastructure.Persistence.Transactions
                 CancellationToken cancellationToken = default)
             {
                 await _transaction.RollbackAsync(cancellationToken);
+                _dbContext.ChangeTracker.Clear();
+                await DisposeAsync();
             }
 
             public async ValueTask DisposeAsync()

@@ -68,6 +68,9 @@ namespace DigiLine.Infrastructure.Tests
             await dbContext.Sessions.AddAsync(session);
             await dbContext.SaveChangesAsync();
 
+            session.OpenBooking();
+            await dbContext.SaveChangesAsync();
+
             var conflictingToken = new DigiLine.Domain.Entities.QueueToken(
                 session.Id,
                 session.NextTokenNumber,
@@ -464,15 +467,18 @@ namespace DigiLine.Infrastructure.Tests
                 now.AddHours(1),
                 10);
 
+            session.OpenBooking();
+
             await setupDbContext.Sessions.AddAsync(session);
 
             var patientProfileIds = new List<Guid>();
+            var phoneNumberPrefix = DateTime.UtcNow.Ticks;
 
             for (var i = 1; i <= bookingCount; i++)
             {
                 var phoneAccount =
                     new DigiLine.Domain.Entities.PhoneAccount(
-                        $"90000000{i:00}");
+                        $"{phoneNumberPrefix}{i:00}");
 
                 await setupDbContext.PhoneAccounts.AddAsync(phoneAccount);
 

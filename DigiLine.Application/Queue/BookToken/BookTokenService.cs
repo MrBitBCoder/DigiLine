@@ -46,20 +46,14 @@ namespace DigiLine.Application.Queue
             await using var transaction =
                 await _transactionManager.BeginAsync(
                     cancellationToken);
-        var session = await _sessionRepository.GetByIdAsync(
-                        sessionId,
-                        cancellationToken);
+            var session = await _sessionRepository.GetByIdAsync(
+                sessionId,
+                cancellationToken);
 
             if (session is null)
             {
                 throw new InvalidOperationException(
                     "Session was not found.");
-            }
-
-            if (!session.IsBookingOpen(DateTime.UtcNow))
-            {
-                throw new InvalidOperationException(
-                    "Booking is not currently open for this session.");
             }
 
             if (session.Status == SessionStatus.Closed)
@@ -69,9 +63,9 @@ namespace DigiLine.Application.Queue
             }
 
             var patientProfile =
-                        await _patientProfileRepository.GetByIdAsync(
-                            patientProfileId,
-                            cancellationToken);
+                await _patientProfileRepository.GetByIdAsync(
+                    patientProfileId,
+                    cancellationToken);
 
             if (patientProfile is null)
             {
@@ -79,6 +73,11 @@ namespace DigiLine.Application.Queue
                     "Patient profile was not found.");
             }
 
+            if (!session.IsBookingOpen(DateTime.UtcNow))
+            {
+                throw new InvalidOperationException(
+                    "Booking is not currently open for this session.");
+            }
 
 
             var tokenNumber =
