@@ -36,23 +36,44 @@ const statusMessages: Record<number, string> = {
 function problemMessage(details: unknown) {
   if (typeof details === "string" && details.trim()) return details;
   if (!details || typeof details !== "object") return null;
-  if ("errors" in details && details.errors && typeof details.errors === "object") {
-    const messages = Object.values(details.errors).flatMap(value =>
-      Array.isArray(value) ? value.filter(item => typeof item === "string") : [],
+  if (
+    "errors" in details &&
+    details.errors &&
+    typeof details.errors === "object"
+  ) {
+    const messages = Object.values(details.errors).flatMap((value) =>
+      Array.isArray(value)
+        ? value.filter((item) => typeof item === "string")
+        : [],
     );
     if (messages.length) return messages.join(" ");
   }
-  if ("detail" in details && typeof details.detail === "string" && details.detail.trim())
+  if (
+    "detail" in details &&
+    typeof details.detail === "string" &&
+    details.detail.trim()
+  )
     return details.detail;
-  if ("title" in details && typeof details.title === "string" && details.title.trim())
+  if (
+    "title" in details &&
+    typeof details.title === "string" &&
+    details.title.trim()
+  )
     return details.title;
   return null;
 }
 
-export function getApiErrorMessage(error: unknown, fallback = "The request could not be completed. Please try again.") {
-  if (!(error instanceof ApiError)) return error instanceof Error ? error.message : fallback;
-  if (error.status >= 500) return "The service is temporarily unavailable. Please try again.";
-  return problemMessage(error.details) ?? statusMessages[error.status] ?? fallback;
+export function getApiErrorMessage(
+  error: unknown,
+  fallback = "The request could not be completed. Please try again.",
+) {
+  if (!(error instanceof ApiError))
+    return error instanceof Error ? error.message : fallback;
+  if (error.status >= 500)
+    return "The service is temporarily unavailable. Please try again.";
+  return (
+    problemMessage(error.details) ?? statusMessages[error.status] ?? fallback
+  );
 }
 
 type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown };
@@ -79,8 +100,12 @@ export async function request<T>(
   if (!response.ok) {
     if (response.status === 401) handleUnauthorized();
     const details = await response.json().catch(() => undefined);
-    const error = new ApiError(statusMessages[response.status] ?? "The request could not be completed. Please try again.", response.status,
-      response.status >= 500 ? undefined : details);
+    const error = new ApiError(
+      statusMessages[response.status] ??
+        "The request could not be completed. Please try again.",
+      response.status,
+      response.status >= 500 ? undefined : details,
+    );
     error.message = getApiErrorMessage(error);
     throw error;
   }

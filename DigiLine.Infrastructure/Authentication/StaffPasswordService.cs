@@ -76,14 +76,17 @@ public sealed class StaffPasswordService(DigiLineDbContext db, IPasswordHasher h
             throw new InvalidOperationException("Configure a valid HTTPS password-reset public base URL.");
         var normalized = email.Trim().ToUpperInvariant();
         var staff = await db.Staff.AsNoTracking().SingleOrDefaultAsync(x => x.NormalizedEmail == normalized, cancellationToken);
-        if (staff is null) return;
+        if (staff is null)
+            return;
         var now = DateTime.UtcNow;
-        if (await db.PasswordResetTokens.AnyAsync(x => x.StaffId == staff.Id && x.CreatedAt > now.AddMinutes(-5), cancellationToken)) return;
+        if (await db.PasswordResetTokens.AnyAsync(x => x.StaffId == staff.Id && x.CreatedAt > now.AddMinutes(-5), cancellationToken))
+            return;
         var raw = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         var token = new PasswordResetToken(staff.Id, Hash(raw), now);
         db.PasswordResetTokens.Add(token);
         await db.SaveChangesAsync(cancellationToken);
-        try { await sender.SendResetLinkAsync(staff.Email, $"{baseUrl.TrimEnd('/')}/reset-password#token={Uri.EscapeDataString(raw)}", cancellationToken); }
+        try
+        { await sender.SendResetLinkAsync(staff.Email, $"{baseUrl.TrimEnd('/')}/reset-password#token={Uri.EscapeDataString(raw)}", cancellationToken); }
         catch (Exception error)
         {
             logger?.LogError(error, "Password reset delivery failed for staff {StaffId}", staff.Id);
@@ -98,14 +101,17 @@ public sealed class StaffPasswordService(DigiLineDbContext db, IPasswordHasher h
         ValidatePassword(newPassword);
         var now = DateTime.UtcNow;
         var token = await db.PasswordResetTokens.SingleOrDefaultAsync(x => x.TokenHash == Hash(raw), cancellationToken);
-        if (token is null || !token.IsValid(now)) throw new ArgumentException("This reset link is invalid or expired.");
+        if (token is null || !token.IsValid(now))
+            throw new ArgumentException("This reset link is invalid or expired.");
         token.Consume(now);
         var staff = await db.Staff.SingleAsync(x => x.Id == token.StaffId, cancellationToken);
         var otherTokens = await db.PasswordResetTokens.Where(x => x.StaffId == staff.Id && x.Id != token.Id && x.UsedAt == null)
             .ToListAsync(cancellationToken);
-        foreach (var other in otherTokens) other.Invalidate(now);
+        foreach (var other in otherTokens)
+            other.Invalidate(now);
         staff.ChangePassword(hasher.Hash(newPassword));
-        try { await db.SaveChangesAsync(cancellationToken); }
+        try
+        { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw new ArgumentException("This reset link is invalid or expired."); }
     }
 

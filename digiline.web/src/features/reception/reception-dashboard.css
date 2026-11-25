@@ -145,7 +145,10 @@
 
 .walk-in-card form {
   display: grid;
-  grid-template-columns: minmax(10rem, 1fr) minmax(9rem, 1fr) minmax(5rem, 0.45fr) auto;
+  grid-template-columns: minmax(10rem, 1fr) minmax(9rem, 1fr) minmax(
+      5rem,
+      0.45fr
+    ) auto;
   gap: var(--space-3);
   align-items: end;
 }

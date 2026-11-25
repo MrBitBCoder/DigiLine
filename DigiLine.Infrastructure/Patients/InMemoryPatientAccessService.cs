@@ -36,8 +36,8 @@ public sealed class InMemoryPatientAccessService : IPatientAccessService
     }
 
     public string? GetPhoneNumber(string accessToken) =>
-        _tickets.TryGetValue(accessToken ?? string.Empty, out var ticket)
-            && ticket.ExpiresAt >= DateTime.UtcNow ? ticket.PhoneNumber : null;
+        _tickets.TryGetValue(accessToken ?? string.Empty, out var ticket) && ticket.ExpiresAt >= DateTime.UtcNow 
+        ? ticket.PhoneNumber : null;
 
     private sealed record Challenge(string PhoneNumber, string Code, DateTime ExpiresAt);
     private sealed record Ticket(string PhoneNumber, DateTime ExpiresAt);

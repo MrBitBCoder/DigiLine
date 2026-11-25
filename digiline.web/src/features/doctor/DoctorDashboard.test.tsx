@@ -83,8 +83,11 @@ function fixture(
           .length,
         lateCount: queue.filter((token) => token.status === "Late").length,
         totalCount: queue.length,
-        completedCount: queue.filter(token => token.status === "Completed").length,
-        notAttendedCount: queue.filter(token => token.status === "NoShow" || token.status === "Skipped").length,
+        completedCount: queue.filter((token) => token.status === "Completed")
+          .length,
+        notAttendedCount: queue.filter(
+          (token) => token.status === "NoShow" || token.status === "Skipped",
+        ).length,
       },
     },
     queue,
@@ -119,8 +122,12 @@ describe("DoctorDashboard", () => {
     api.getActiveOrUpcoming.mockResolvedValue(undefined);
     render(<DoctorDashboard />);
     await screen.findByText("No active or upcoming session");
-    expect(screen.getByText(/Create your next clinic session on the Sessions page/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add session" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Create your next clinic session on the Sessions page/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add session" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders backend queue order and summary values", async () => {
@@ -129,15 +136,39 @@ describe("DoctorDashboard", () => {
     expect(
       await screen.findByRole("heading", { name: "Morning clinic" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Doctor dashboard · DigiLine Clinic/)).toBeInTheDocument();
-    const currentCard = screen.getByText("Queue ready").closest<HTMLDivElement>(".current-patient-panel")!;
-    expect(currentCard.compareDocumentPosition(screen.getByRole("heading", { name: "Patient queue" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(currentCard).getByRole("button", { name: "Call next" })).toBeEnabled();
+    expect(
+      screen.getByText(/Doctor dashboard · DigiLine Clinic/),
+    ).toBeInTheDocument();
+    const currentCard = screen
+      .getByText("Queue ready")
+      .closest<HTMLDivElement>(".current-patient-panel")!;
+    expect(
+      currentCard.compareDocumentPosition(
+        screen.getByRole("heading", { name: "Patient queue" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(currentCard).getByRole("button", { name: "Call next" }),
+    ).toBeEnabled();
     const rows = screen.getAllByRole("row").slice(1);
     expect(within(rows[0]).getByText("#1")).toBeInTheDocument();
     expect(within(rows[1]).getByText("#2")).toBeInTheDocument();
-    for (const header of ["Token", "Patient", "Age", "Phone", "Type", "Status", "Registered at", "Called at", "Late arrival", "Completed at", "Actions"])
-      expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
+    for (const header of [
+      "Token",
+      "Patient",
+      "Age",
+      "Phone",
+      "Type",
+      "Status",
+      "Registered at",
+      "Called at",
+      "Late arrival",
+      "Completed at",
+      "Actions",
+    ])
+      expect(
+        screen.getByRole("columnheader", { name: header }),
+      ).toBeInTheDocument();
     expect(
       screen.getByText("Ready to call").previousElementSibling,
     ).toHaveTextContent("1");
@@ -148,7 +179,13 @@ describe("DoctorDashboard", () => {
 
   it("shows booked patient identity, age, and phone in the doctor queue", async () => {
     const details = fixture("Running", ["Waiting"]);
-    details.queue[0] = { ...details.queue[0], walkInName: null, patientName: "Asha Rao", patientAge: 34, phoneNumber: "9999999999" };
+    details.queue[0] = {
+      ...details.queue[0],
+      walkInName: null,
+      patientName: "Asha Rao",
+      patientAge: 34,
+      phoneNumber: "9999999999",
+    };
     api.getActiveOrUpcoming.mockResolvedValue(details);
     render(<DoctorDashboard />);
     const row = (await screen.findByText("Asha Rao")).closest("tr")!;
@@ -169,9 +206,16 @@ describe("DoctorDashboard", () => {
     await user.dblClick(callNext);
     await waitFor(() => expect(api.callNext).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(api.getSession).toHaveBeenCalledWith("session-1", undefined, 1, "Active"),
+      expect(api.getSession).toHaveBeenCalledWith(
+        "session-1",
+        undefined,
+        1,
+        "Active",
+      ),
     );
-    expect(await screen.findByRole("heading", { name: "Token #1" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Token #1" }),
+    ).toBeInTheDocument();
   });
 
   it("shows backend validation detail when an action is rejected", async () => {
@@ -182,7 +226,11 @@ describe("DoctorDashboard", () => {
       }),
     );
     const user = userEvent.setup();
-    render(<ToastProvider><DoctorDashboard /></ToastProvider>);
+    render(
+      <ToastProvider>
+        <DoctorDashboard />
+      </ToastProvider>,
+    );
     await user.click(await screen.findByRole("button", { name: "Call next" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Call Next is only available for a running session.",
@@ -193,7 +241,9 @@ describe("DoctorDashboard", () => {
     api.getActiveOrUpcoming.mockResolvedValue(fixture("Paused", ["Waiting"]));
     render(<DoctorDashboard />);
     expect(await screen.findByRole("button", { name: "Resume" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Complete session" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Complete session" }),
+    ).toBeDisabled();
     expect(screen.getByRole("button", { name: "Call next" })).toBeDisabled();
     expect(
       screen.queryByRole("button", { name: "Pause" }),
@@ -208,8 +258,12 @@ describe("DoctorDashboard", () => {
     api.getSession.mockResolvedValue(completed);
     const user = userEvent.setup();
     render(<DoctorDashboard />);
-    expect(await screen.findByRole("heading", { name: "Token #1" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Call again/i })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Token #1" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Call again/i }),
+    ).not.toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Complete" }));
     expect(api.complete).not.toHaveBeenCalled();
     await user.click(
@@ -231,7 +285,12 @@ describe("DoctorDashboard", () => {
     await actRealtimeEvent();
 
     expect(await screen.findByText("#2")).toBeInTheDocument();
-    expect(api.getSession).toHaveBeenCalledWith("session-1", undefined, 1, "Active");
+    expect(api.getSession).toHaveBeenCalledWith(
+      "session-1",
+      undefined,
+      1,
+      "Active",
+    );
   });
 
   it("keeps a skipped patient visible for the Patient arrived action", async () => {
@@ -242,8 +301,14 @@ describe("DoctorDashboard", () => {
     render(<DoctorDashboard />);
     expect(await screen.findByText("Awaiting arrival")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Patient arrived" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Patient arrived" }));
-    await waitFor(() => expect(api.markLate).toHaveBeenCalledWith("session-1", "token-1"));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Patient arrived",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.markLate).toHaveBeenCalledWith("session-1", "token-1"),
+    );
   });
 
   it("updates every connected doctor screen after an external Reception change", async () => {
@@ -281,35 +346,60 @@ describe("DoctorDashboard", () => {
     api.getActiveOrUpcoming.mockResolvedValue(fixture("BookingOpen", []));
     api.getSession.mockResolvedValue(fixture("Closed", []));
     render(<DoctorDashboard />);
-    await waitFor(() => expect(document.querySelector(".session-state .status-badge")).toHaveTextContent("Booking open"));
-    await act(async () => { await Promise.all([...realtime.callbacks].map(callback => callback())); });
-    await waitFor(() => expect(document.querySelector(".session-state .status-badge")).toHaveTextContent("Completed"));
-    expect(document.querySelector(".session-state .status-badge")).not.toHaveClass("status-info");
-    expect(document.querySelector(".session-state .status-badge")).not.toHaveTextContent("Booking open");
+    await waitFor(() =>
+      expect(
+        document.querySelector(".session-state .status-badge"),
+      ).toHaveTextContent("Booking open"),
+    );
+    await act(async () => {
+      await Promise.all([...realtime.callbacks].map((callback) => callback()));
+    });
+    await waitFor(() =>
+      expect(
+        document.querySelector(".session-state .status-badge"),
+      ).toHaveTextContent("Completed"),
+    );
+    expect(
+      document.querySelector(".session-state .status-badge"),
+    ).not.toHaveClass("status-info");
+    expect(
+      document.querySelector(".session-state .status-badge"),
+    ).not.toHaveTextContent("Booking open");
   });
   it("keeps Running lifecycle status when booking is stopped", async () => {
-    const stopped = fixture("Running", []); stopped.session.isBookingOpen = false;
+    const stopped = fixture("Running", []);
+    stopped.session.isBookingOpen = false;
     api.getActiveOrUpcoming.mockResolvedValue(stopped);
     render(<DoctorDashboard />);
-    expect(await screen.findByText("Running", { exact: true })).toHaveClass("status-success");
-    expect(document.querySelector(".session-state .status-badge")).not.toHaveTextContent("Completed");
+    expect(await screen.findByText("Running", { exact: true })).toHaveClass(
+      "status-success",
+    );
+    expect(
+      document.querySelector(".session-state .status-badge"),
+    ).not.toHaveTextContent("Completed");
   });
 
   it.each<[SessionStatus, boolean, boolean]>([
-    ["Scheduled", false, false], ["BookingOpen", false, false],
-    ["Running", false, true], ["Paused", false, true],
-    ["Running", true, false], ["Closed", false, false],
-  ])("Stop booking availability for %s with alreadyStopped=%s", async (status, stopped, available) => {
-    const data = fixture(status, []);
-    data.session.bookingHasStopped = stopped;
-    data.session.isBookingOpen = !stopped && status !== "Closed";
-    api.getActiveOrUpcoming.mockResolvedValue(data);
-    render(<DoctorDashboard />);
-    await screen.findByRole("heading", { name: "Patient queue" });
-    const button = screen.queryByRole("button", { name: "Stop booking" });
-    if (available) expect(button).toBeEnabled();
-    else expect(button).not.toBeInTheDocument();
-  });
+    ["Scheduled", false, false],
+    ["BookingOpen", false, false],
+    ["Running", false, true],
+    ["Paused", false, true],
+    ["Running", true, false],
+    ["Closed", false, false],
+  ])(
+    "Stop booking availability for %s with alreadyStopped=%s",
+    async (status, stopped, available) => {
+      const data = fixture(status, []);
+      data.session.bookingHasStopped = stopped;
+      data.session.isBookingOpen = !stopped && status !== "Closed";
+      api.getActiveOrUpcoming.mockResolvedValue(data);
+      render(<DoctorDashboard />);
+      await screen.findByRole("heading", { name: "Patient queue" });
+      const button = screen.queryByRole("button", { name: "Stop booking" });
+      if (available) expect(button).toBeEnabled();
+      else expect(button).not.toBeInTheDocument();
+    },
+  );
 
   it("shows action feedback after stopping booking without relying on realtime refresh", async () => {
     const before = fixture("Running", []);
@@ -322,10 +412,22 @@ describe("DoctorDashboard", () => {
     api.stopBooking.mockResolvedValue(undefined);
     api.getSession.mockResolvedValue(after);
     const user = userEvent.setup();
-    render(<ToastProvider><DoctorDashboard /></ToastProvider>);
-    await user.click(await screen.findByRole("button", { name: "Stop booking" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Stop booking" }));
-    expect(await screen.findByText("Booking stopped. No new patients can join.")).toBeInTheDocument();
+    render(
+      <ToastProvider>
+        <DoctorDashboard />
+      </ToastProvider>,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Stop booking" }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Stop booking",
+      }),
+    );
+    expect(
+      await screen.findByText("Booking stopped. No new patients can join."),
+    ).toBeInTheDocument();
   });
 
   it("completes the current token and immediately shows the next called patient", async () => {
@@ -333,53 +435,101 @@ describe("DoctorDashboard", () => {
     const after = fixture("Running", ["Completed", "Called"]);
     api.getActiveOrUpcoming.mockResolvedValue(before);
     api.completeAndCallNext.mockResolvedValue({
-      completedToken: { ...before.queue[0], status: "Completed", completedAt: "2026-08-19T08:10:00Z" },
+      completedToken: {
+        ...before.queue[0],
+        status: "Completed",
+        completedAt: "2026-08-19T08:10:00Z",
+      },
       calledToken: { ...after.queue[1], status: "Called" },
     });
     api.getSession.mockResolvedValue(after);
     const user = userEvent.setup();
-    render(<ToastProvider><DoctorDashboard /></ToastProvider>);
+    render(
+      <ToastProvider>
+        <DoctorDashboard />
+      </ToastProvider>,
+    );
 
-    expect(await screen.findByRole("button", { name: "Complete & call next" })).toBeEnabled();
+    expect(
+      await screen.findByRole("button", { name: "Complete & call next" }),
+    ).toBeEnabled();
     expect(screen.getByRole("button", { name: "Complete" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "Call next" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Complete & call next" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Complete & call next" }));
+    expect(
+      screen.queryByRole("button", { name: "Call next" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Complete & call next" }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Complete & call next",
+      }),
+    );
 
-    await waitFor(() => expect(api.completeAndCallNext).toHaveBeenCalledWith("session-1", "token-1"));
-    expect(await screen.findByRole("heading", { name: "Token #2" })).toBeInTheDocument();
-    expect(screen.getByText("Token #1 completed. Token #2 called.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.completeAndCallNext).toHaveBeenCalledWith(
+        "session-1",
+        "token-1",
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Token #2" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Token #1 completed. Token #2 called."),
+    ).toBeInTheDocument();
   });
 
   it("uses standalone Complete when the current patient is last", async () => {
     api.getActiveOrUpcoming.mockResolvedValue(fixture("Running", ["Called"]));
     render(<DoctorDashboard />);
 
-    expect(await screen.findByRole("button", { name: "Complete" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "Complete & call next" })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Complete" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Complete & call next" }),
+    ).not.toBeInTheDocument();
   });
 
   it("prioritizes the current patient and one primary next action", async () => {
-    api.getActiveOrUpcoming.mockResolvedValue(fixture("Running", ["Called", "Waiting"]));
+    api.getActiveOrUpcoming.mockResolvedValue(
+      fixture("Running", ["Called", "Waiting"]),
+    );
     render(<DoctorDashboard />);
 
-    const panel = (await screen.findByRole("heading", { name: "Token #1" })).closest<HTMLElement>(".current-patient-panel")!;
-    expect(within(panel).getByRole("heading", { name: "Token #1" })).toBeInTheDocument();
+    const panel = (
+      await screen.findByRole("heading", { name: "Token #1" })
+    ).closest<HTMLElement>(".current-patient-panel")!;
+    expect(
+      within(panel).getByRole("heading", { name: "Token #1" }),
+    ).toBeInTheDocument();
     expect(within(panel).getByText("Patient 1")).toBeInTheDocument();
     expect(within(panel).getByText("Called")).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "Complete & call next" })).toHaveClass("primary-queue-action");
-    expect(within(panel).getByRole("button", { name: "Not here—skip" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: /Call Again/i })).not.toBeInTheDocument();
-    expect(panel.compareDocumentPosition(screen.getByRole("heading", { name: "Patient queue" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      within(panel).getByRole("button", { name: "Complete & call next" }),
+    ).toHaveClass("primary-queue-action");
+    expect(
+      within(panel).getByRole("button", { name: "Not here—skip" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /Call Again/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      panel.compareDocumentPosition(
+        screen.getByRole("heading", { name: "Patient queue" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("does not offer an unimplemented consultation action", async () => {
     api.getActiveOrUpcoming.mockResolvedValue(fixture("Running", ["Called"]));
     render(<DoctorDashboard />);
     await screen.findByRole("heading", { name: "Token #1" });
-    expect(screen.queryByRole("button", { name: /Start consultation/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Start consultation/i }),
+    ).not.toBeInTheDocument();
   });
-
 });
 
 async function actRealtimeEvent() {

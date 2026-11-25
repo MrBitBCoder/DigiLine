@@ -59,8 +59,24 @@ export const receptionApi = {
     );
     return { ...value, sessions: value.sessions.map(details) };
   },
-  getSession: async (id: string, page = 1, filter = "Active", signal?: AbortSignal) => details(await request<DoctorSessionDetails>(`/api/reception/sessions/${id}?page=${page}&filter=${encodeURIComponent(filter)}`, { signal })),
-  walkIn: (sessionId: string, walkInName: string, phoneNumber?: string, age?: number) =>
+  getSession: async (
+    id: string,
+    page = 1,
+    filter = "Active",
+    signal?: AbortSignal,
+  ) =>
+    details(
+      await request<DoctorSessionDetails>(
+        `/api/reception/sessions/${id}?page=${page}&filter=${encodeURIComponent(filter)}`,
+        { signal },
+      ),
+    ),
+  walkIn: (
+    sessionId: string,
+    walkInName: string,
+    phoneNumber?: string,
+    age?: number,
+  ) =>
     request<{ tokenNumber: number }>("/api/reception/queue/walk-in", {
       method: "POST",
       body: {

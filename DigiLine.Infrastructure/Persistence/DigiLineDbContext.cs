@@ -220,14 +220,16 @@ namespace DigiLine.Infrastructure.Persistence
             });
 
             modelBuilder.Entity<StaffRoleAssignment>().HasKey(x => new { x.StaffId, x.Role });
-            modelBuilder.Entity<StaffInvitation>(entity => {
+            modelBuilder.Entity<StaffInvitation>(entity =>
+            {
                 entity.HasKey(x => x.Id);
                 entity.Property(x => x.TokenHash).HasMaxLength(64);
                 entity.HasIndex(x => x.TokenHash).IsUnique();
                 entity.Property(x => x.UsedAt).IsConcurrencyToken();
                 entity.HasOne<Staff>().WithMany().HasForeignKey(x => x.StaffId);
             });
-            modelBuilder.Entity<AdministrationAudit>(entity => {
+            modelBuilder.Entity<AdministrationAudit>(entity =>
+            {
                 entity.HasKey(x => x.Id);
                 entity.Property(x => x.Action).HasMaxLength(200);
                 entity.HasIndex(x => new { x.ClinicId, x.OccurredAt });
@@ -238,14 +240,15 @@ namespace DigiLine.Infrastructure.Persistence
 
             // Apply the same UTC contract to audit and queue-event timestamps.
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())
-            foreach (var property in entityType.GetProperties())
-            {
-                if (property.ClrType == typeof(DateTime)) property.SetValueConverter(utcDateTime);
-                if (property.ClrType == typeof(DateTime?))
-                    property.SetValueConverter(new ValueConverter<DateTime?, DateTime?>(
-                        value => value.HasValue ? RequireUtc(value.Value) : null,
-                        value => value.HasValue ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc) : null));
-            }
+                foreach (var property in entityType.GetProperties())
+                {
+                    if (property.ClrType == typeof(DateTime))
+                        property.SetValueConverter(utcDateTime);
+                    if (property.ClrType == typeof(DateTime?))
+                        property.SetValueConverter(new ValueConverter<DateTime?, DateTime?>(
+                            value => value.HasValue ? RequireUtc(value.Value) : null,
+                            value => value.HasValue ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc) : null));
+                }
 
 
         }

@@ -64,7 +64,7 @@ builder.Services
             }
         };
     });
-
+builder.Services.AddAuthorization();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddRateLimiter(options =>
 {

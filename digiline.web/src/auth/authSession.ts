@@ -36,7 +36,12 @@ function decodePayload(token: string): JwtPayload {
 }
 export function createSession(token: string): AuthSession {
   const payload = decodePayload(token);
-  const roles = (Array.isArray(payload.role) ? payload.role : [payload.role]).filter((value): value is StaffRole => value === "Doctor" || value === "Receptionist" || value === "Admin");
+  const roles = (
+    Array.isArray(payload.role) ? payload.role : [payload.role]
+  ).filter(
+    (value): value is StaffRole =>
+      value === "Doctor" || value === "Receptionist" || value === "Admin",
+  );
   const role = roles[0];
   const name = payload.name ?? payload.unique_name;
   if (
@@ -83,4 +88,5 @@ export function clearSession() {
   sessionStorage.removeItem(STORAGE_KEY);
 }
 
-export const userRoles = (user: AuthUser): StaffRole[] => user.roles ?? [user.role];
+export const userRoles = (user: AuthUser): StaffRole[] =>
+  user.roles ?? [user.role];

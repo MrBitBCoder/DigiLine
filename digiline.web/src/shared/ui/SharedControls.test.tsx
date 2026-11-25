@@ -7,7 +7,9 @@ import { TextField } from "./FormControls";
 
 describe("shared form controls", () => {
   it("associates field guidance and errors with the input", () => {
-    const view = render(<TextField label="Email" hint="Use your work email." />);
+    const view = render(
+      <TextField label="Email" hint="Use your work email." />,
+    );
     const input = screen.getByRole("textbox", { name: "Email" });
     expect(input).toHaveAccessibleDescription("Use your work email.");
 
@@ -19,7 +21,9 @@ describe("shared form controls", () => {
   it("disables a busy button and exposes its progress state", () => {
     render(<Button busy>Save changes</Button>);
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Save changes" })).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.getByRole("button", { name: "Save changes" }),
+    ).toHaveAttribute("aria-busy", "true");
   });
 });
 
@@ -42,7 +46,10 @@ describe("ConfirmationDialog", () => {
     );
 
     expect(screen.getByRole("button", { name: "Keep session" })).toHaveFocus();
-    fireEvent(screen.getByRole("dialog"), new Event("cancel", { cancelable: true }));
+    fireEvent(
+      screen.getByRole("dialog"),
+      new Event("cancel", { cancelable: true }),
+    );
     expect(onCancel).toHaveBeenCalledOnce();
     expect(onConfirm).not.toHaveBeenCalled();
 

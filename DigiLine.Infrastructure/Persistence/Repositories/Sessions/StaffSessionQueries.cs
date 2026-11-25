@@ -29,29 +29,41 @@ public sealed class StaffSessionQueries(DigiLineDbContext db) : IStaffSessionQue
     {
         var summaries = await query.ToListAsync(ct);
         var ids = summaries.Where(x => x.Status != SessionStatus.Closed).Select(x => x.Id).ToArray();
-        if (ids.Length == 0) return summaries;
+        if (ids.Length == 0)
+            return summaries;
         // Scope before ranking: EF's navigation FirstOrDefault otherwise ranks calls across the entire token table.
         var calls = await db.QueueTokens.AsNoTracking().Where(t => ids.Contains(t.SessionId) &&
                 (t.Status == QueueTokenStatus.Called || t.Status == QueueTokenStatus.InConsultation))
             .OrderByDescending(t => t.CalledAt ?? t.CreatedAt).ThenBy(t => t.Id)
-            .Select(t => new { t.SessionId, Token = new QueueTokenListItem(t.Id, t.TokenNumber, t.PatientProfileId, t.WalkInName,
+            .Select(t => new
+            {
+                t.SessionId,
+                Token = new QueueTokenListItem(t.Id, t.TokenNumber, t.PatientProfileId, t.WalkInName,
                 t.PatientProfile != null ? t.PatientProfile.PhoneAccount.PhoneNumber : t.PhoneNumber, t.Status, t.CreatedAt, t.CalledAt, t.CompletedAt,
-                t.PatientProfile != null ? t.PatientProfile.Name : t.WalkInName, t.PatientProfile != null ? t.PatientProfile.Age : t.WalkInAge, t.LateArrivedAt, t.QueueOrder, t.FinalizedAt) }).ToListAsync(ct);
+                t.PatientProfile != null ? t.PatientProfile.Name : t.WalkInName, t.PatientProfile != null ? t.PatientProfile.Age : t.WalkInAge, t.LateArrivedAt, t.QueueOrder, t.FinalizedAt)
+            }).ToListAsync(ct);
         return summaries.Select(s => s with { QueueSummary = s.QueueSummary with { CurrentToken = calls.FirstOrDefault(t => t.SessionId == s.Id)?.Token } }).ToList();
     }
 
     public async Task<PageResult<DoctorSessionSummary>> ListAsync(Guid clinic, Guid? doctor, SessionPageQuery request, CancellationToken ct)
     {
         var query = Scoped(clinic, doctor);
-        if (!string.IsNullOrWhiteSpace(request.Name)) query = query.Where(x => x.Name.Contains(request.Name.Trim()));
-        if (request.Status.HasValue) { if (!Enum.IsDefined(request.Status.Value)) throw new ArgumentException("Invalid session status."); query = query.Where(x => x.Status == request.Status); }
-        if (request.FromDate > request.ToDate) throw new ArgumentException("End date must be on or after start date.");
-        if (request.FromDate.HasValue || request.ToDate.HasValue) {
+        if (!string.IsNullOrWhiteSpace(request.Name))
+            query = query.Where(x => x.Name.Contains(request.Name.Trim()));
+        if (request.Status.HasValue)
+        { if (!Enum.IsDefined(request.Status.Value)) throw new ArgumentException("Invalid session status."); query = query.Where(x => x.Status == request.Status); }
+        if (request.FromDate > request.ToDate)
+            throw new ArgumentException("End date must be on or after start date.");
+        if (request.FromDate.HasValue || request.ToDate.HasValue)
+        {
             var zone = TimeZoneInfo.FindSystemTimeZoneById(await db.Clinics.Where(x => x.Id == clinic).Select(x => x.TimeZoneId).SingleAsync(ct));
-            if (request.FromDate.HasValue) { var from = TimeZoneInfo.ConvertTimeToUtc(request.FromDate.Value.ToDateTime(TimeOnly.MinValue), zone); query = query.Where(x => x.StartTime >= from); }
-            if (request.ToDate.HasValue) { var to = TimeZoneInfo.ConvertTimeToUtc(request.ToDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), zone); query = query.Where(x => x.StartTime < to); }
+            if (request.FromDate.HasValue)
+            { var from = TimeZoneInfo.ConvertTimeToUtc(request.FromDate.Value.ToDateTime(TimeOnly.MinValue), zone); query = query.Where(x => x.StartTime >= from); }
+            if (request.ToDate.HasValue)
+            { var to = TimeZoneInfo.ConvertTimeToUtc(request.ToDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), zone); query = query.Where(x => x.StartTime < to); }
         }
-        var total = await query.CountAsync(ct); var size = Math.Clamp(request.PageSize, 1, 100);
+        var total = await query.CountAsync(ct);
+        var size = Math.Clamp(request.PageSize, 1, 100);
         var page = Math.Clamp(request.Page, 1, Math.Max(1, (int)Math.Ceiling(total / (double)size)));
         var items = await WithCurrentTokens(Summaries(query.OrderByDescending(x => x.StartTime).ThenBy(x => x.Id).Skip((page - 1) * size).Take(size)), ct);
         return new(items, page, size, total);
@@ -59,15 +71,18 @@ public sealed class StaffSessionQueries(DigiLineDbContext db) : IStaffSessionQue
     public async Task<DoctorSessionDetails?> DetailsAsync(Guid clinic, Guid? doctor, Guid id, int page, int pageSize, string filter, CancellationToken ct)
     {
         var summary = (await WithCurrentTokens(Summaries(Scoped(clinic, doctor).Where(x => x.Id == id)), ct)).SingleOrDefault();
-        if (summary is null) return null;
+        if (summary is null)
+            return null;
         var query = db.QueueTokens.AsNoTracking().Where(x => x.SessionId == id);
-        query = filter switch {
+        query = filter switch
+        {
             "Active" => query.Where(x => x.Status == QueueTokenStatus.Called || x.Status == QueueTokenStatus.InConsultation || x.Status == QueueTokenStatus.Waiting || x.Status == QueueTokenStatus.Late || x.Status == QueueTokenStatus.Skipped),
             "Completed" => query.Where(x => x.Status == QueueTokenStatus.Completed),
             "Other finished" => query.Where(x => x.Status == QueueTokenStatus.Cancelled || x.Status == QueueTokenStatus.NoShow),
             _ => throw new ArgumentException("Invalid queue filter.")
         };
-        var total = await query.CountAsync(ct); pageSize = Math.Clamp(pageSize, 1, 100);
+        var total = await query.CountAsync(ct);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         page = Math.Clamp(page, 1, Math.Max(1, (int)Math.Ceiling(total / (double)pageSize)));
         var ordered = filter == "Completed"
             ? query.OrderByDescending(x => x.CompletedAt ?? x.CreatedAt).ThenByDescending(x => x.TokenNumber).ThenBy(x => x.Id)

@@ -1,6 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import {
+  Link,
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthSession } from "../auth/authSession";
@@ -21,15 +27,31 @@ const session: AuthSession = {
 
 function Location() {
   const location = useLocation();
-  return <output aria-label="Current location">{location.pathname}{location.search}</output>;
+  return (
+    <output aria-label="Current location">
+      {location.pathname}
+      {location.search}
+    </output>
+  );
 }
 
 function Dashboard() {
-  return <><h1>Doctor dashboard page</h1><Location /></>;
+  return (
+    <>
+      <h1>Doctor dashboard page</h1>
+      <Location />
+    </>
+  );
 }
 
 function Sessions() {
-  return <><h1>Sessions page</h1><Link to="/doctor?session=session-7">View queue</Link><Location /></>;
+  return (
+    <>
+      <h1>Sessions page</h1>
+      <Link to="/doctor?session=session-7">View queue</Link>
+      <Location />
+    </>
+  );
 }
 
 function renderAt(path: string) {
@@ -63,15 +85,24 @@ describe("doctor navigation", () => {
     expect(menu).toHaveAttribute("aria-expanded", "false");
     expect(menu).toHaveAttribute("aria-controls");
     await user.click(menu);
-    expect(screen.getByRole("button", { name: "Close menu" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Close menu" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
 
     await user.keyboard("{Escape}");
-    expect(screen.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     expect(screen.getByRole("button", { name: "Menu" })).toHaveFocus();
 
     await user.click(screen.getByRole("button", { name: "Menu" }));
     fireEvent.pointerDown(document.body);
-    expect(screen.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 
   it("closes the menu after navigation while preserving destination heading focus", async () => {
@@ -80,8 +111,15 @@ describe("doctor navigation", () => {
     await user.click(screen.getByRole("button", { name: "Menu" }));
     await user.click(doctorNavigation().sessions);
 
-    expect(screen.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Sessions page" })).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Menu" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Sessions page" }),
+      ).toHaveFocus(),
+    );
   });
 
   it("marks only Doctor Dashboard current, including with a selected-session query", async () => {
@@ -90,8 +128,14 @@ describe("doctor navigation", () => {
     expect(nav.dashboard).toHaveAttribute("aria-current", "page");
     expect(nav.dashboard).toHaveClass("active");
     expect(nav.sessions).not.toHaveAttribute("aria-current");
-    expect(screen.getAllByRole("link", { current: "page" })).toEqual([nav.dashboard]);
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Doctor dashboard page" })).toHaveFocus());
+    expect(screen.getAllByRole("link", { current: "page" })).toEqual([
+      nav.dashboard,
+    ]);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Doctor dashboard page" }),
+      ).toHaveFocus(),
+    );
   });
 
   it("marks only Sessions current and moves focus to its page heading", async () => {
@@ -100,8 +144,14 @@ describe("doctor navigation", () => {
     expect(nav.sessions).toHaveAttribute("aria-current", "page");
     expect(nav.sessions).toHaveClass("active");
     expect(nav.dashboard).not.toHaveAttribute("aria-current");
-    expect(screen.getAllByRole("link", { current: "page" })).toEqual([nav.sessions]);
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Sessions page" })).toHaveFocus());
+    expect(screen.getAllByRole("link", { current: "page" })).toEqual([
+      nav.sessions,
+    ]);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Sessions page" }),
+      ).toHaveFocus(),
+    );
   });
 
   it("supports keyboard route changes and clears focus from the activated nav item", async () => {
@@ -110,8 +160,14 @@ describe("doctor navigation", () => {
     const sessionsLink = doctorNavigation().sessions;
     sessionsLink.focus();
     await user.keyboard("{Enter}");
-    expect(await screen.findByLabelText("Current location")).toHaveTextContent("/doctor/sessions");
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Sessions page" })).toHaveFocus());
+    expect(await screen.findByLabelText("Current location")).toHaveTextContent(
+      "/doctor/sessions",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Sessions page" }),
+      ).toHaveFocus(),
+    );
     expect(sessionsLink).not.toHaveFocus();
   });
 
@@ -119,14 +175,29 @@ describe("doctor navigation", () => {
     const user = userEvent.setup();
     renderAt("/doctor/sessions");
     await user.click(screen.getByRole("link", { name: "View queue" }));
-    expect(await screen.findByLabelText("Current location")).toHaveTextContent("/doctor?session=session-7");
-    expect(doctorNavigation().dashboard).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByLabelText("Current location")).toHaveTextContent(
+      "/doctor?session=session-7",
+    );
+    expect(doctorNavigation().dashboard).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     expect(doctorNavigation().sessions).not.toHaveAttribute("aria-current");
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Doctor dashboard page" })).toHaveFocus());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Doctor dashboard page" }),
+      ).toHaveFocus(),
+    );
 
     await user.click(doctorNavigation().sessions);
-    expect(await screen.findByLabelText("Current location")).toHaveTextContent("/doctor/sessions");
+    expect(await screen.findByLabelText("Current location")).toHaveTextContent(
+      "/doctor/sessions",
+    );
     expect(doctorNavigation().sessions).toHaveAttribute("aria-current", "page");
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Sessions page" })).toHaveFocus());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Sessions page" }),
+      ).toHaveFocus(),
+    );
   });
 });

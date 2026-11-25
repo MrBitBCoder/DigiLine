@@ -51,32 +51,57 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const cleanMessage = message.trim();
     if (!cleanMessage) return;
     setToasts((current) => {
-      if (current.some((toast) => toast.type === type && toast.message === cleanMessage))
+      if (
+        current.some(
+          (toast) => toast.type === type && toast.message === cleanMessage,
+        )
+      )
         return current;
       const duration = durations[type];
-      const toast = { id: ++nextToastId, type, message: cleanMessage, duration, expiresAt: Date.now() + duration };
+      const toast = {
+        id: ++nextToastId,
+        type,
+        message: cleanMessage,
+        duration,
+        expiresAt: Date.now() + duration,
+      };
       return [toast, ...current].slice(0, 5);
     });
   }, []);
 
-  const api = useMemo<ToastApi>(() => ({
-    success: (message) => show("success", message),
-    error: (message) => show("error", message),
-    warning: (message) => show("warning", message),
-    info: (message) => show("info", message),
-  }), [show]);
+  const api = useMemo<ToastApi>(
+    () => ({
+      success: (message) => show("success", message),
+      error: (message) => show("error", message),
+      warning: (message) => show("warning", message),
+      info: (message) => show("info", message),
+    }),
+    [show],
+  );
 
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <section className="toast-viewport" role="region" aria-label="Notifications">
-        {toasts.map((toast) => <ToastItem key={toast.id} toast={toast} onRemove={remove} />)}
+      <section
+        className="toast-viewport"
+        role="region"
+        aria-label="Notifications"
+      >
+        {toasts.map((toast) => (
+          <ToastItem key={toast.id} toast={toast} onRemove={remove} />
+        ))}
       </section>
     </ToastContext.Provider>
   );
 }
 
-function ToastItem({ toast, onRemove }: { toast: ToastMessage; onRemove: (id: number) => void }) {
+function ToastItem({
+  toast,
+  onRemove,
+}: {
+  toast: ToastMessage;
+  onRemove: (id: number) => void;
+}) {
   const remaining = useRef(toast.duration);
   const startedAt = useRef(0);
   const dismissTimer = useRef<number | undefined>(undefined);
@@ -101,7 +126,10 @@ function ToastItem({ toast, onRemove }: { toast: ToastMessage; onRemove: (id: nu
   const pauseTimer = useCallback(() => {
     window.clearTimeout(dismissTimer.current);
     if (startedAt.current)
-      remaining.current = Math.max(0, remaining.current - (Date.now() - startedAt.current));
+      remaining.current = Math.max(
+        0,
+        remaining.current - (Date.now() - startedAt.current),
+      );
     startedAt.current = 0;
   }, []);
 
@@ -110,7 +138,8 @@ function ToastItem({ toast, onRemove }: { toast: ToastMessage; onRemove: (id: nu
   }, [startTimer]);
 
   useEffect(() => {
-    if (leaving) removalTimer.current = window.setTimeout(() => onRemove(toast.id), 180);
+    if (leaving)
+      removalTimer.current = window.setTimeout(() => onRemove(toast.id), 180);
     else startTimer();
     return () => {
       window.clearTimeout(dismissTimer.current);
@@ -124,9 +153,18 @@ function ToastItem({ toast, onRemove }: { toast: ToastMessage; onRemove: (id: nu
       role={toast.type === "error" ? "alert" : "status"}
       aria-live={toast.type === "error" ? "assertive" : "polite"}
       aria-atomic="true"
-      onMouseEnter={() => { hovered.current = true; pauseTimer(); }}
-      onMouseLeave={() => { hovered.current = false; resumeTimer(); }}
-      onFocusCapture={() => { focused.current = true; pauseTimer(); }}
+      onMouseEnter={() => {
+        hovered.current = true;
+        pauseTimer();
+      }}
+      onMouseLeave={() => {
+        hovered.current = false;
+        resumeTimer();
+      }}
+      onFocusCapture={() => {
+        focused.current = true;
+        pauseTimer();
+      }}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           focused.current = false;
@@ -134,12 +172,21 @@ function ToastItem({ toast, onRemove }: { toast: ToastMessage; onRemove: (id: nu
         }
       }}
     >
-      <span className="toast-icon" aria-hidden="true">{icons[toast.type]}</span>
+      <span className="toast-icon" aria-hidden="true">
+        {icons[toast.type]}
+      </span>
       <div className="toast-content">
         <strong>{labels[toast.type]}</strong>
         <span>{toast.message}</span>
       </div>
-      <button type="button" className="toast-dismiss" aria-label={`Dismiss ${labels[toast.type].toLowerCase()} notification`} onClick={dismiss}>×</button>
+      <button
+        type="button"
+        className="toast-dismiss"
+        aria-label={`Dismiss ${labels[toast.type].toLowerCase()} notification`}
+        onClick={dismiss}
+      >
+        ×
+      </button>
     </article>
   );
 }

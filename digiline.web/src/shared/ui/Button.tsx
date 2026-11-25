@@ -8,24 +8,29 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
 }
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
-  variant = "primary",
-  busy = false,
-  disabled,
-  className = "",
-  children,
-  ...props
-}, ref) {
-  return (
-    <button
-      className={`ds-button ds-button-${variant} ${className}`}
-      ref={ref}
-      disabled={disabled || busy}
-      aria-busy={busy || undefined}
-      {...props}
-    >
-      {busy && <span className="button-spinner" aria-hidden="true" />}
-      {children}
-    </button>
-  );
-});
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    {
+      variant = "primary",
+      busy = false,
+      disabled,
+      className = "",
+      children,
+      ...props
+    },
+    ref,
+  ) {
+    return (
+      <button
+        className={`ds-button ds-button-${variant} ${className}`}
+        ref={ref}
+        disabled={disabled || busy}
+        aria-busy={busy || undefined}
+        {...props}
+      >
+        {busy && <span className="button-spinner" aria-hidden="true" />}
+        {children}
+      </button>
+    );
+  },
+);

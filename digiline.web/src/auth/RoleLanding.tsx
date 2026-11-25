@@ -6,7 +6,13 @@ export function RoleLanding() {
   if (!session) return <Navigate to="/login" replace />;
   return (
     <Navigate
-      to={userRoles(session.user).includes("Admin") ? "/admin" : userRoles(session.user).includes("Doctor") ? "/doctor" : "/staff"}
+      to={
+        userRoles(session.user).includes("Doctor")
+          ? "/doctor"
+          : userRoles(session.user).includes("Admin")
+            ? "/admin"
+            : "/staff"
+      }
       replace
     />
   );

@@ -19,7 +19,8 @@ public sealed class PublicPatientRepository : IPublicPatientRepository
     public async Task<PublicPatientProfile> CreateAsync(string phoneNumber, string name, int age, CancellationToken cancellationToken = default)
     {
         var account = await _dbContext.PhoneAccounts.SingleOrDefaultAsync(value => value.PhoneNumber == phoneNumber, cancellationToken);
-        if (account is null) { account = new PhoneAccount(phoneNumber); _dbContext.PhoneAccounts.Add(account); }
+        if (account is null)
+        { account = new PhoneAccount(phoneNumber); _dbContext.PhoneAccounts.Add(account); }
         var profile = new PatientProfile(account.Id, name, age);
         _dbContext.PatientProfiles.Add(profile);
         await _dbContext.SaveChangesAsync(cancellationToken);

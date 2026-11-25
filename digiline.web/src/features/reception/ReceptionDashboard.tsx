@@ -47,7 +47,8 @@ interface Confirmation {
 export function ReceptionDashboard() {
   const toast = useToast();
   const [data, setData] = useState<ReceptionData | null>(null);
-  const [selectedDetails, setSelectedDetails] = useState<DoctorSessionDetails | null>(null);
+  const [selectedDetails, setSelectedDetails] =
+    useState<DoctorSessionDetails | null>(null);
   const [sessionPage, setSessionPage] = useState(1);
   const [page, setPage] = useState(1);
   const version = useRef(0);
@@ -64,19 +65,40 @@ export function ReceptionDashboard() {
   const [actionError, setActionError] = useState("");
   const [issuedToken, setIssuedToken] = useState<number | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
-  const load = useCallback(async (signal?: AbortSignal) => {
-    const currentVersion = ++version.current;
-    const next = await receptionApi.today(signal, sessionPage);
-    if (signal?.aborted || currentVersion !== version.current) return;
-    const id = next.sessions.some(x => x.session.id === selectedId) ? selectedId : next.sessions[0]?.session.id ?? "";
-    const selected = id ? await receptionApi.getSession(id, id === selectedId ? page : 1, queueFilter, signal) : null;
-    if (signal?.aborted || currentVersion !== version.current) return;
-    setData(next); setSelectedId(id); setSelectedDetails(selected); setPage(selected?.page ?? 1); setSessionPage(next.page ?? 1);
-  }, [selectedId, sessionPage, page, queueFilter]);
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      const currentVersion = ++version.current;
+      const next = await receptionApi.today(signal, sessionPage);
+      if (signal?.aborted || currentVersion !== version.current) return;
+      const id = next.sessions.some((x) => x.session.id === selectedId)
+        ? selectedId
+        : (next.sessions[0]?.session.id ?? "");
+      const selected = id
+        ? await receptionApi.getSession(
+            id,
+            id === selectedId ? page : 1,
+            queueFilter,
+            signal,
+          )
+        : null;
+      if (signal?.aborted || currentVersion !== version.current) return;
+      setData(next);
+      setSelectedId(id);
+      setSelectedDetails(selected);
+      setPage(selected?.page ?? 1);
+      setSessionPage(next.page ?? 1);
+    },
+    [selectedId, sessionPage, page, queueFilter],
+  );
   useEffect(() => {
     const controller = new AbortController();
-    void load(controller.signal).catch(caught => { if (!controller.signal.aborted) setError(getApiErrorMessage(caught)); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    void load(controller.signal)
+      .catch((caught) => {
+        if (!controller.signal.aborted) setError(getApiErrorMessage(caught));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
     return () => controller.abort();
   }, [attempt, load]);
   const refresh = useCallback(async () => {
@@ -88,7 +110,12 @@ export function ReceptionDashboard() {
       }
     }
   }, [load]);
-  useBookingCutoffRefresh(data?.sessions.map(item => item.session) ?? [], () => { void refresh(); });
+  useBookingCutoffRefresh(
+    data?.sessions.map((item) => item.session) ?? [],
+    () => {
+      void refresh();
+    },
+  );
   const realtime = useQueueRealtime(selectedId || null, refresh);
   async function run(key: string, action: () => Promise<unknown>) {
     if (busyRef.current) return false;
@@ -98,14 +125,21 @@ export function ReceptionDashboard() {
     try {
       await action();
       await load();
-      if (key === "walk-in") toast.success("Walk-in patient added successfully.");
-      else if (key.startsWith("late-")) toast.success("Patient marked as arrived.");
+      if (key === "walk-in")
+        toast.success("Walk-in patient added successfully.");
+      else if (key.startsWith("late-"))
+        toast.success("Patient marked as arrived.");
       else if (key.startsWith("cancel-")) toast.success("Token cancelled.");
       else toast.success("Queue updated.");
       return true;
     } catch (caught) {
       const message = getApiErrorMessage(caught);
-      if (caught instanceof ApiError && caught.status === 409 && /already/i.test(message)) toast.warning(message);
+      if (
+        caught instanceof ApiError &&
+        caught.status === 409 &&
+        /already/i.test(message)
+      )
+        toast.warning(message);
       else toast.error(message);
       return false;
     } finally {
@@ -116,9 +150,22 @@ export function ReceptionDashboard() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     const clean = name.trim();
-    if (!clean || !selectedId || age === "" || !Number.isInteger(Number(age)) || Number(age) < 0 || Number(age) > 130) return;
+    if (
+      !clean ||
+      !selectedId ||
+      age === "" ||
+      !Number.isInteger(Number(age)) ||
+      Number(age) < 0 ||
+      Number(age) > 130
+    )
+      return;
     const succeeded = await run("walk-in", async () => {
-      const result = await receptionApi.walkIn(selectedId, clean, phone.trim(), Number(age));
+      const result = await receptionApi.walkIn(
+        selectedId,
+        clean,
+        phone.trim(),
+        Number(age),
+      );
       setIssuedToken(result.tokenNumber);
     });
     if (succeeded) {
@@ -149,7 +196,10 @@ export function ReceptionDashboard() {
     );
   const selected =
     data.sessions.find((x) => x.session.id === selectedId) ?? data.sessions[0];
-  const { session, queue } = selectedDetails?.session.id === selected.session.id ? selectedDetails : selected;
+  const { session, queue } =
+    selectedDetails?.session.id === selected.session.id
+      ? selectedDetails
+      : selected;
   const current = session.queueSummary.currentToken;
   const columns: TableColumn<QueueToken>[] = [
     {
@@ -168,16 +218,46 @@ export function ReceptionDashboard() {
     },
     { key: "age", header: "Age", render: (x) => x.patientAge ?? "—" },
     { key: "phone", header: "Phone", render: (x) => x.phoneNumber || "—" },
-    { key: "source", header: "Type", render: x => x.walkInName ? "Walk-in" : "Booked" },
+    {
+      key: "source",
+      header: "Type",
+      render: (x) => (x.walkInName ? "Walk-in" : "Booked"),
+    },
     {
       key: "status",
       header: "Status",
-      render: (x) => <><StatusBadge status={x.status} />{x.status === "Skipped" && <small>Awaiting arrival</small>}</>,
+      render: (x) => (
+        <>
+          <StatusBadge status={x.status} />
+          {x.status === "Skipped" && <small>Awaiting arrival</small>}
+        </>
+      ),
     },
-    { key: "registered", header: "Registered at", render: (x) => formatClinicTime(x.createdAt, data?.timeZoneId) },
-    { key: "called", header: "Called at", render: x => x.calledAt ? formatClinicTime(x.calledAt, data?.timeZoneId) : "—" },
-    { key: "late-arrival", header: "Late arrival", render: x => x.lateArrivedAt ? formatClinicTime(x.lateArrivedAt, data?.timeZoneId) : "—" },
-    { key: "completed", header: "Completed at", render: x => x.completedAt ? formatClinicTime(x.completedAt, data?.timeZoneId) : "—" },
+    {
+      key: "registered",
+      header: "Registered at",
+      render: (x) => formatClinicTime(x.createdAt, data?.timeZoneId),
+    },
+    {
+      key: "called",
+      header: "Called at",
+      render: (x) =>
+        x.calledAt ? formatClinicTime(x.calledAt, data?.timeZoneId) : "—",
+    },
+    {
+      key: "late-arrival",
+      header: "Late arrival",
+      render: (x) =>
+        x.lateArrivedAt
+          ? formatClinicTime(x.lateArrivedAt, data?.timeZoneId)
+          : "—",
+    },
+    {
+      key: "completed",
+      header: "Completed at",
+      render: (x) =>
+        x.completedAt ? formatClinicTime(x.completedAt, data?.timeZoneId) : "—",
+    },
     {
       key: "actions",
       header: "Actions",
@@ -191,7 +271,8 @@ export function ReceptionDashboard() {
               onClick={() =>
                 setConfirmation({
                   title: `Patient arrived for token #${x.tokenNumber}?`,
-                  message: "This skipped patient will rejoin the callable queue after all waiting patients.",
+                  message:
+                    "This skipped patient will rejoin the callable queue after all waiting patients.",
                   label: "Patient arrived",
                   key: `late-${x.id}`,
                   run: () => receptionApi.markLate(session.id, x.id),
@@ -227,15 +308,42 @@ export function ReceptionDashboard() {
       <PageHeader
         eyebrow="Reception workspace"
         title="Reception desk"
-        description={<>{data.clinicName || session.clinicName} · Today’s sessions, arrivals, and queue support</>}
-        context={<span className={`realtime-state realtime-${realtime}`}><i aria-hidden="true" />{realtime === "connected" ? "Live" : realtime}{realtime !== "connected" && <button type="button" onClick={() => window.dispatchEvent(new Event("digiline-retry-realtime"))}>Retry connection</button>}</span>}
+        description={
+          <>
+            {data.clinicName || session.clinicName} · Today’s sessions,
+            arrivals, and queue support
+          </>
+        }
+        context={
+          <span className={`realtime-state realtime-${realtime}`}>
+            <i aria-hidden="true" />
+            {realtime === "connected" ? "Live" : realtime}
+            {realtime !== "connected" && (
+              <button
+                type="button"
+                onClick={() =>
+                  window.dispatchEvent(new Event("digiline-retry-realtime"))
+                }
+              >
+                Retry connection
+              </button>
+            )}
+          </span>
+        }
       />
-      <section className="reception-session-toolbar" aria-label="Session selection">
+      <section
+        className="reception-session-toolbar"
+        aria-label="Session selection"
+      >
         <div className="reception-session-controls">
           <SelectField
             label="Session"
             value={selectedId}
-            onChange={(event) => { version.current++; setPage(1); setSelectedId(event.target.value); }}
+            onChange={(event) => {
+              version.current++;
+              setPage(1);
+              setSelectedId(event.target.value);
+            }}
           >
             {data.sessions.map((x) => (
               <option key={x.session.id} value={x.session.id}>
@@ -244,7 +352,26 @@ export function ReceptionDashboard() {
               </option>
             ))}
           </SelectField>
-          <nav aria-label="Session pages"><Button aria-label="Previous sessions" disabled={sessionPage <= 1} onClick={() => setSessionPage(p => p - 1)}>Previous</Button><span>Page {sessionPage}</span><Button aria-label="Next sessions" disabled={sessionPage * (data.pageSize ?? 10) >= (data.totalCount ?? data.sessions.length)} onClick={() => setSessionPage(p => p + 1)}>Next</Button></nav>
+          <nav aria-label="Session pages">
+            <Button
+              aria-label="Previous sessions"
+              disabled={sessionPage <= 1}
+              onClick={() => setSessionPage((p) => p - 1)}
+            >
+              Previous
+            </Button>
+            <span>Page {sessionPage}</span>
+            <Button
+              aria-label="Next sessions"
+              disabled={
+                sessionPage * (data.pageSize ?? 10) >=
+                (data.totalCount ?? data.sessions.length)
+              }
+              onClick={() => setSessionPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </nav>
         </div>
       </section>
       {actionError && (
@@ -255,27 +382,57 @@ export function ReceptionDashboard() {
           </button>
         </div>
       )}
-      <section className="reception-overview" aria-label="Active session and queue summary">
+      <section
+        className="reception-overview"
+        aria-label="Active session and queue summary"
+      >
         <Card padding="compact" className="reception-active-panel">
           <div className="reception-session-copy">
             <span className="eyebrow">Active session</span>
             <h2>{session.doctorName}</h2>
-            <p>{session.name} · {formatClinicTime(session.startTime, data.timeZoneId)} – {formatClinicTime(session.endTime, data.timeZoneId)} · {data.timeZoneId ?? "Asia/Kolkata"}</p>
+            <p>
+              {session.name} ·{" "}
+              {formatClinicTime(session.startTime, data.timeZoneId)} –{" "}
+              {formatClinicTime(session.endTime, data.timeZoneId)} ·{" "}
+              {data.timeZoneId ?? "Asia/Kolkata"}
+            </p>
             <div className="reception-session-state">
               <SessionStateBadges session={session} />
-              <span>{session.status === "Paused" ? "Doctor temporarily unavailable" : session.status === "Running" ? "Doctor available" : "Doctor not currently consulting"}</span>
+              <span>
+                {session.status === "Paused"
+                  ? "Doctor temporarily unavailable"
+                  : session.status === "Running"
+                    ? "Doctor available"
+                    : "Doctor not currently consulting"}
+              </span>
             </div>
           </div>
           <div className="reception-current-token">
             <span className="eyebrow">Current token</span>
             <strong>{current ? `#${current.tokenNumber}` : "—"}</strong>
-            <small>{current ? `${patientName(current)} · ${patientDetails(current)}` : "No active call"}</small>
+            <small>
+              {current
+                ? `${patientName(current)} · ${patientDetails(current)}`
+                : "No active call"}
+            </small>
           </div>
         </Card>
         <dl className="reception-queue-summary" aria-label="Queue summary">
-          <div><dt>Waiting</dt><dd>{session.queueSummary.waitingCount}</dd><dd className="summary-detail">Ready to be called</dd></div>
-          <div><dt>Late</dt><dd>{session.queueSummary.lateCount}</dd><dd className="summary-detail">Needs assistance</dd></div>
-          <div><dt>Total</dt><dd>{session.queueSummary.totalCount}</dd><dd className="summary-detail">Tokens issued</dd></div>
+          <div>
+            <dt>Waiting</dt>
+            <dd>{session.queueSummary.waitingCount}</dd>
+            <dd className="summary-detail">Ready to be called</dd>
+          </div>
+          <div>
+            <dt>Late</dt>
+            <dd>{session.queueSummary.lateCount}</dd>
+            <dd className="summary-detail">Needs assistance</dd>
+          </div>
+          <div>
+            <dt>Total</dt>
+            <dd>{session.queueSummary.totalCount}</dd>
+            <dd className="summary-detail">Tokens issued</dd>
+          </div>
         </dl>
       </section>
       <section className="queue-section">
@@ -286,15 +443,31 @@ export function ReceptionDashboard() {
           </div>
           <span>{session.queueSummary.totalCount} tokens</span>
         </div>
-        <label>Show tokens <select value={queueFilter} onChange={event => { version.current++; setPage(1); setQueueFilter(event.target.value as QueueFilter); }}><option>Active</option><option>Completed</option><option>Other finished</option></select></label>
+        <label>
+          Show tokens{" "}
+          <select
+            value={queueFilter}
+            onChange={(event) => {
+              version.current++;
+              setPage(1);
+              setQueueFilter(event.target.value as QueueFilter);
+            }}
+          >
+            <option>Active</option>
+            <option>Completed</option>
+            <option>Other finished</option>
+          </select>
+        </label>
         {queue.length ? (
           <Card padding="none">
             <DataTable
               caption={`Reception queue for ${session.name}`}
               columns={columns}
               rows={queue}
-              page={selectedDetails?.page ?? page} totalCount={selectedDetails?.totalCount ?? queue.length} onPageChange={setPage}
-              pageKey={`${session.id}:${queueFilter}:${queueFilter === "Completed" ? queue.filter(token => token.status === "Completed").length : ""}`}
+              page={selectedDetails?.page ?? page}
+              totalCount={selectedDetails?.totalCount ?? queue.length}
+              onPageChange={setPage}
+              pageKey={`${session.id}:${queueFilter}:${queueFilter === "Completed" ? queue.filter((token) => token.status === "Completed").length : ""}`}
               getRowKey={(x) => x.id}
             />
           </Card>
@@ -312,12 +485,42 @@ export function ReceptionDashboard() {
           <p>Issue the next token for the selected session.</p>
         </div>
         <form onSubmit={submit}>
-          <TextField label="Patient name" value={name} maxLength={200} onChange={(e) => setName(e.target.value)} required />
-          <TextField label="Phone (optional)" type="tel" maxLength={20} value={phone} onChange={(e) => setPhone(e.target.value)} />
-          <TextField label="Age" type="number" min={0} max={130} step={1} value={age} onChange={event => setAge(event.target.value)} required />
-          <Button busy={busy === "walk-in"} disabled={!!busy || !session.isBookingOpen}>Issue token</Button>
+          <TextField
+            label="Patient name"
+            value={name}
+            maxLength={200}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <TextField
+            label="Phone (optional)"
+            type="tel"
+            maxLength={20}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+          <TextField
+            label="Age"
+            type="number"
+            min={0}
+            max={130}
+            step={1}
+            value={age}
+            onChange={(event) => setAge(event.target.value)}
+            required
+          />
+          <Button
+            busy={busy === "walk-in"}
+            disabled={!!busy || !session.isBookingOpen}
+          >
+            Issue token
+          </Button>
         </form>
-        {!session.isBookingOpen && <small className="booking-warning">Walk-in booking is closed for this session.</small>}
+        {!session.isBookingOpen && (
+          <small className="booking-warning">
+            Walk-in booking is closed for this session.
+          </small>
+        )}
       </Card>
       <ConfirmationDialog
         open={!!confirmation}

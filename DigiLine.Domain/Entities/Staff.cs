@@ -35,7 +35,8 @@ namespace DigiLine.Domain.Entities
             var selected = roles.Distinct().ToArray();
             if (selected.Length == 0 || selected.Any(role => !Enum.IsDefined(role)))
                 throw new ArgumentException("Choose at least one valid role.");
-            foreach (var assignment in Roles.Where(x => !selected.Contains(x.Role)).ToArray()) Roles.Remove(assignment);
+            foreach (var assignment in Roles.Where(x => !selected.Contains(x.Role)).ToArray())
+                Roles.Remove(assignment);
             foreach (var role in selected.Where(role => !Roles.Any(x => x.Role == role)))
                 Roles.Add(new StaffRoleAssignment(Id, role));
             Role = selected[0]; // Retained for migration compatibility; authorization uses Roles.

@@ -34,8 +34,7 @@ export function ConfirmationDialog({
     if (open && !dialog.open) {
       dialog.showModal();
       cancelRef.current?.focus();
-    }
-    else if (!open && dialog.open) dialog.close();
+    } else if (!open && dialog.open) dialog.close();
   }, [open]);
   return (
     <dialog

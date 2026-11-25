@@ -16,7 +16,13 @@ export function LoginPage() {
   if (session)
     return (
       <Navigate
-        to={userRoles(session.user).includes("Admin") ? "/admin" : userRoles(session.user).includes("Doctor") ? "/doctor" : "/staff"}
+        to={
+          userRoles(session.user).includes("Doctor")
+            ? "/doctor"
+            : userRoles(session.user).includes("Admin")
+              ? "/admin"
+              : "/staff"
+        }
         replace
       />
     );
@@ -27,7 +33,12 @@ export function LoginPage() {
       const next = await login(email.trim(), password);
       const requested = (location.state as { from?: string } | null)?.from;
       navigate(
-        requested ?? (userRoles(next.user).includes("Admin") ? "/admin" : userRoles(next.user).includes("Doctor") ? "/doctor" : "/staff"),
+        requested ??
+          (userRoles(next.user).includes("Doctor")
+            ? "/doctor"
+            : userRoles(next.user).includes("Admin")
+              ? "/admin"
+              : "/staff"),
         { replace: true },
       );
     } catch (caught) {
@@ -45,47 +56,50 @@ export function LoginPage() {
   return (
     <main className="auth-page login-page">
       <div className="auth-shell">
-      <section className="auth-brand-context" aria-label="DigiLine staff access">
-        <span className="brand-mark" aria-hidden="true">
-          D
-        </span>
-        <span className="eyebrow">DigiLine staff</span>
-        <h2>Clinic queue workspace</h2>
-        <p>
-          Manage today’s sessions and keep patients moving.
-        </p>
-      </section>
-      <Card className="auth-card login-card" aria-labelledby="login-title">
-        <div>
-          <span className="eyebrow">Welcome back</span>
-          <h1 id="login-title">Sign in to your workspace</h1>
-        </div>
-        <form onSubmit={submit}>
-          <TextField
-            label="Email address"
-            autoComplete="username"
-            inputMode="email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            autoFocus
-          />
-          <TextField
-            label="Password"
-            autoComplete="current-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-          <Button className="login-button" busy={submitting} type="submit">
-            {submitting ? "Signing in…" : "Sign in"}
-          </Button>
-          <div className="auth-links"><Link to="/register">Register a clinic</Link>
-          <Link to="/forgot-password">Forgot password?</Link></div>
-        </form>
-      </Card>
+        <section
+          className="auth-brand-context"
+          aria-label="DigiLine staff access"
+        >
+          <span className="brand-mark" aria-hidden="true">
+            D
+          </span>
+          <span className="eyebrow">DigiLine staff</span>
+          <h2>Clinic queue workspace</h2>
+          <p>Manage today’s sessions and keep patients moving.</p>
+        </section>
+        <Card className="auth-card login-card" aria-labelledby="login-title">
+          <div>
+            <span className="eyebrow">Welcome back</span>
+            <h1 id="login-title">Sign in to your workspace</h1>
+          </div>
+          <form onSubmit={submit}>
+            <TextField
+              label="Email address"
+              autoComplete="username"
+              inputMode="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              autoFocus
+            />
+            <TextField
+              label="Password"
+              autoComplete="current-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+            <Button className="login-button" busy={submitting} type="submit">
+              {submitting ? "Signing in…" : "Sign in"}
+            </Button>
+            <div className="auth-links">
+              <Link to="/register">Register a clinic</Link>
+              <Link to="/forgot-password">Forgot password?</Link>
+            </div>
+          </form>
+        </Card>
       </div>
     </main>
   );

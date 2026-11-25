@@ -1,7 +1,10 @@
 import type { QueueTokenStatus, SessionStatus } from "../types/domain";
 
 export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
-export const statusPresentation: Record<SessionStatus | QueueTokenStatus, { label: string; tone: StatusTone }> = {
+export const statusPresentation: Record<
+  SessionStatus | QueueTokenStatus,
+  { label: string; tone: StatusTone }
+> = {
   Scheduled: { label: "Scheduled", tone: "neutral" },
   BookingOpen: { label: "Booking open", tone: "info" },
   Running: { label: "Running", tone: "success" },
@@ -25,7 +28,10 @@ export interface BookingAvailability {
   bookingHasStopped?: boolean;
 }
 export type BookingState = "notOpen" | "open" | "stopped" | "closed";
-export const bookingPresentation: Record<BookingState, { label: string; tone: StatusTone }> = {
+export const bookingPresentation: Record<
+  BookingState,
+  { label: string; tone: StatusTone }
+> = {
   notOpen: { label: "Booking not open", tone: "neutral" },
   open: { label: "Booking open", tone: "info" },
   stopped: { label: "Booking stopped", tone: "warning" },
@@ -34,7 +40,10 @@ export const bookingPresentation: Record<BookingState, { label: string; tone: St
 
 // Availability comes from the API. Time only explains a negative availability;
 // it never opens booking or advances the session lifecycle.
-export function getBookingState(session: BookingAvailability, now = Date.now()): BookingState {
+export function getBookingState(
+  session: BookingAvailability,
+  now = Date.now(),
+): BookingState {
   if (session.status === "Closed") return "closed";
   if (session.bookingStoppedAt || session.bookingHasStopped) return "stopped";
   if (session.isBookingOpen) return "open";

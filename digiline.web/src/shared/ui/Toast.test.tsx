@@ -5,17 +5,30 @@ import { useToast } from "./ToastContext";
 
 function Controls() {
   const toast = useToast();
-  return <div>
-    <button onClick={() => toast.success("Saved")}>Success</button>
-    <button onClick={() => toast.error("Failed")}>Error</button>
-    <button onClick={() => toast.warning("Check this")}>Warning</button>
-    <button onClick={() => toast.info("Updated")}>Info</button>
-    <button onClick={() => { for (let index = 0; index < 6; index++) toast.info(`Message ${index}`); }}>Many</button>
-  </div>;
+  return (
+    <div>
+      <button onClick={() => toast.success("Saved")}>Success</button>
+      <button onClick={() => toast.error("Failed")}>Error</button>
+      <button onClick={() => toast.warning("Check this")}>Warning</button>
+      <button onClick={() => toast.info("Updated")}>Info</button>
+      <button
+        onClick={() => {
+          for (let index = 0; index < 6; index++)
+            toast.info(`Message ${index}`);
+        }}
+      >
+        Many
+      </button>
+    </div>
+  );
 }
 
 function show() {
-  return render(<ToastProvider><Controls /></ToastProvider>);
+  return render(
+    <ToastProvider>
+      <Controls />
+    </ToastProvider>,
+  );
 }
 
 afterEach(() => vi.useRealTimers());
@@ -27,7 +40,9 @@ describe("ToastProvider", () => {
     fireEvent.click(screen.getByText("Error"));
     fireEvent.click(screen.getByText("Warning"));
     fireEvent.click(screen.getByText("Info"));
-    expect(screen.getByRole("region", { name: "Notifications" })).toHaveClass("toast-viewport");
+    expect(screen.getByRole("region", { name: "Notifications" })).toHaveClass(
+      "toast-viewport",
+    );
     expect(screen.getByRole("alert")).toHaveTextContent("ErrorFailed");
     expect(screen.getAllByRole("status")).toHaveLength(3);
   });
@@ -40,7 +55,9 @@ describe("ToastProvider", () => {
     act(() => vi.advanceTimersByTime(180));
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Error"));
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss error notification" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss error notification" }),
+    );
     act(() => vi.advanceTimersByTime(180));
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
   });
@@ -57,7 +74,9 @@ describe("ToastProvider", () => {
     act(() => vi.advanceTimersByTime(5_000));
     expect(screen.getByText("Updated")).toBeInTheDocument();
     fireEvent.mouseLeave(item);
-    const dismiss = screen.getByRole("button", { name: "Dismiss information notification" });
+    const dismiss = screen.getByRole("button", {
+      name: "Dismiss information notification",
+    });
     dismiss.focus();
     act(() => vi.advanceTimersByTime(5_000));
     expect(screen.getByText("Updated")).toBeInTheDocument();
@@ -73,7 +92,9 @@ describe("ToastProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "Success" }));
     expect(screen.getAllByText("Saved")).toHaveLength(1);
     fireEvent.click(screen.getByText("Many"));
-    const messages = screen.getByRole("region", { name: "Notifications" }).querySelectorAll("article");
+    const messages = screen
+      .getByRole("region", { name: "Notifications" })
+      .querySelectorAll("article");
     expect(messages).toHaveLength(5);
     expect(messages[0]).toHaveTextContent("Message 5");
   });

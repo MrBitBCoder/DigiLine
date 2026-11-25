@@ -77,7 +77,9 @@ describe("useQueueRealtime", () => {
       "session-1",
     );
 
-    act(() => signalr.handlers.get("QueueChanged")?.({ sessionId: "session-1" }));
+    act(() =>
+      signalr.handlers.get("QueueChanged")?.({ sessionId: "session-1" }),
+    );
     await waitFor(() => expect(changed).toHaveBeenCalledTimes(2));
     expect(changed).toHaveBeenCalledTimes(2);
     act(() =>

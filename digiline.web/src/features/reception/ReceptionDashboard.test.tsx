@@ -63,7 +63,8 @@ function fixture(statuses = ["Waiting", "Skipped", "Called"] as const): Data {
         lateCount: 0,
         totalCount: queue.length,
         completedCount: 0,
-        notAttendedCount: queue.filter(token => token.status === "Skipped").length,
+        notAttendedCount: queue.filter((token) => token.status === "Skipped")
+          .length,
       },
     },
     queue,
@@ -76,27 +77,57 @@ describe("ReceptionDashboard", () => {
     Object.values(api).forEach((mock) => mock.mockReset());
     realtime.callback = null;
     api.getSession.mockImplementation(async (id: string) => {
-      const data = await api.today.mock.results.at(-1)?.value as Data;
-      return data.sessions.find(x => x.session.id === id);
+      const data = (await api.today.mock.results.at(-1)?.value) as Data;
+      return data.sessions.find((x) => x.session.id === id);
     });
   });
   it("renders today summary and doctor availability", async () => {
     api.today.mockResolvedValue(fixture());
-    render(<ToastProvider><ReceptionDashboard /></ToastProvider>);
+    render(
+      <ToastProvider>
+        <ReceptionDashboard />
+      </ToastProvider>,
+    );
     expect(await screen.findByText("Reception desk")).toBeInTheDocument();
     expect(screen.getByText("Doctor available")).toBeInTheDocument();
     expect(screen.getByText("9999999999")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Call again/i })).not.toBeInTheDocument();
-    const overview = screen.getByRole("region", { name: "Active session and queue summary" });
+    expect(
+      screen.queryByRole("button", { name: /Call again/i }),
+    ).not.toBeInTheDocument();
+    const overview = screen.getByRole("region", {
+      name: "Active session and queue summary",
+    });
     expect(within(overview).getByText("Current token")).toBeInTheDocument();
     expect(within(overview).getByText("#3")).toBeInTheDocument();
-    expect(within(overview).getByText("Patient 3 · Age: — · Phone: —")).toBeInTheDocument();
-    for (const header of ["Token", "Patient", "Age", "Phone", "Type", "Status", "Registered at", "Called at", "Late arrival", "Completed at", "Actions"])
-      expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
+    expect(
+      within(overview).getByText("Patient 3 · Age: — · Phone: —"),
+    ).toBeInTheDocument();
+    for (const header of [
+      "Token",
+      "Patient",
+      "Age",
+      "Phone",
+      "Type",
+      "Status",
+      "Registered at",
+      "Called at",
+      "Late arrival",
+      "Completed at",
+      "Actions",
+    ])
+      expect(
+        screen.getByRole("columnheader", { name: header }),
+      ).toBeInTheDocument();
   });
   it("shows booked patient identity, age, and phone in queue details", async () => {
     const data = fixture();
-    data.sessions[0].queue[0] = { ...data.sessions[0].queue[0], walkInName: null, patientName: "Asha Rao", patientAge: 34, phoneNumber: "9999999999" };
+    data.sessions[0].queue[0] = {
+      ...data.sessions[0].queue[0],
+      walkInName: null,
+      patientName: "Asha Rao",
+      patientAge: 34,
+      phoneNumber: "9999999999",
+    };
     api.today.mockResolvedValue(data);
     render(<ReceptionDashboard />);
     const row = (await screen.findByText("Asha Rao")).closest("tr")!;
@@ -107,14 +138,20 @@ describe("ReceptionDashboard", () => {
     api.today.mockResolvedValue(fixture());
     api.walkIn.mockResolvedValue({ tokenNumber: 12 });
     const user = userEvent.setup();
-    render(<ToastProvider><ReceptionDashboard /></ToastProvider>);
+    render(
+      <ToastProvider>
+        <ReceptionDashboard />
+      </ToastProvider>,
+    );
     await user.type(await screen.findByLabelText(/Patient name/), "Asha");
     await user.type(screen.getByLabelText(/^Age/), "34");
     const button = screen.getByRole("button", { name: "Issue token" });
     await user.dblClick(button);
     await waitFor(() => expect(api.walkIn).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Token #12")).toBeInTheDocument();
-    expect(screen.getByText("Walk-in patient added successfully.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Walk-in patient added successfully."),
+    ).toBeInTheDocument();
   });
   it("registers a walk-in with an optional phone number", async () => {
     api.today.mockResolvedValue(fixture());
@@ -125,18 +162,35 @@ describe("ReceptionDashboard", () => {
     await user.type(screen.getByLabelText(/^Age/), "34");
     await user.type(screen.getByLabelText(/Phone \(optional\)/), "9876543210");
     await user.click(screen.getByRole("button", { name: "Issue token" }));
-    await waitFor(() => expect(api.walkIn).toHaveBeenCalledWith("session-1", "Asha", "9876543210", 34));
+    await waitFor(() =>
+      expect(api.walkIn).toHaveBeenCalledWith(
+        "session-1",
+        "Asha",
+        "9876543210",
+        34,
+      ),
+    );
     expect(await screen.findByText("Token #13")).toBeInTheDocument();
   });
   it("shows server validation errors without issuing a token", async () => {
     api.today.mockResolvedValue(fixture());
-    api.walkIn.mockRejectedValue(new ApiError("One or more validation errors occurred.", 400, { errors: { WalkInName: ["Name is invalid."] } }));
+    api.walkIn.mockRejectedValue(
+      new ApiError("One or more validation errors occurred.", 400, {
+        errors: { WalkInName: ["Name is invalid."] },
+      }),
+    );
     const user = userEvent.setup();
-    render(<ToastProvider><ReceptionDashboard /></ToastProvider>);
+    render(
+      <ToastProvider>
+        <ReceptionDashboard />
+      </ToastProvider>,
+    );
     await user.type(await screen.findByLabelText(/Patient name/), "Asha");
     await user.type(screen.getByLabelText(/^Age/), "34");
     await user.click(screen.getByRole("button", { name: "Issue token" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Name is invalid.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Name is invalid.",
+    );
     expect(screen.queryByText(/Token #/)).not.toBeInTheDocument();
   });
   it("confirms cancellation before changing the queue", async () => {
@@ -167,19 +221,39 @@ describe("ReceptionDashboard", () => {
     render(<ReceptionDashboard />);
     expect(await screen.findByText("Awaiting arrival")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Patient arrived" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Patient arrived" }));
-    await waitFor(() => expect(api.markLate).toHaveBeenCalledWith("session-1", "token-1"));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Patient arrived",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.markLate).toHaveBeenCalledWith("session-1", "token-1"),
+    );
   });
   it("shows Completed after the selected session closes and realtime refreshes", async () => {
-    const before = fixture(); before.sessions[0].session.status = "BookingOpen";
+    const before = fixture();
+    before.sessions[0].session.status = "BookingOpen";
     api.today.mockResolvedValue(before);
     render(<ReceptionDashboard />);
-    await waitFor(() => expect(document.querySelector(".reception-active-panel .status-badge")).toHaveTextContent("Booking open"));
-    const after = fixture(); after.sessions[0].session.status = "Closed"; after.sessions[0].session.isBookingOpen = false;
+    await waitFor(() =>
+      expect(
+        document.querySelector(".reception-active-panel .status-badge"),
+      ).toHaveTextContent("Booking open"),
+    );
+    const after = fixture();
+    after.sessions[0].session.status = "Closed";
+    after.sessions[0].session.isBookingOpen = false;
     api.today.mockResolvedValue(after);
-    await act(async () => { await realtime.callback?.(); });
-    await waitFor(() => expect(document.querySelector(".reception-active-panel .status-badge")).toHaveTextContent("Completed"));
-    expect(document.querySelector(".reception-active-panel .status-badge")).not.toHaveClass("status-info");
+    await act(async () => {
+      await realtime.callback?.();
+    });
+    await waitFor(() =>
+      expect(
+        document.querySelector(".reception-active-panel .status-badge"),
+      ).toHaveTextContent("Completed"),
+    );
+    expect(
+      document.querySelector(".reception-active-panel .status-badge"),
+    ).not.toHaveClass("status-info");
   });
-
 });
