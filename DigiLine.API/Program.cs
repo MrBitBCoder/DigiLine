@@ -154,17 +154,17 @@ builder.Services.AddProblemDetails();
 var app = builder.Build();
 
 
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext =
-        scope.ServiceProvider.GetRequiredService<DigiLineDbContext>();
+//using (var scope = app.Services.CreateScope())
+//{
+//    var dbContext =
+//        scope.ServiceProvider.GetRequiredService<DigiLineDbContext>();
 
-    await dbContext.Database.MigrateAsync();
-    var defaultZone = builder.Configuration["ClinicTime:DefaultTimeZoneId"] ?? "Asia/Kolkata";
-    _ = TimeZoneInfo.FindSystemTimeZoneById(defaultZone);
-    await dbContext.Clinics.Where(clinic => clinic.TimeZoneId == "")
-        .ExecuteUpdateAsync(setters => setters.SetProperty(clinic => clinic.TimeZoneId, defaultZone));
-}
+//    await dbContext.Database.MigrateAsync();
+//    var defaultZone = builder.Configuration["ClinicTime:DefaultTimeZoneId"] ?? "Asia/Kolkata";
+//    _ = TimeZoneInfo.FindSystemTimeZoneById(defaultZone);
+//    await dbContext.Clinics.Where(clinic => clinic.TimeZoneId == "")
+//        .ExecuteUpdateAsync(setters => setters.SetProperty(clinic => clinic.TimeZoneId, defaultZone));
+//}
 
 
 // Configure the HTTP request pipeline.
