@@ -153,6 +153,12 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+app.MapGet("/", () => Results.Ok(new
+{
+    Application = "DigiLine API",
+    Status = "Running",
+    Message = "DigiLine backend is online."
+}));
 
 //using (var scope = app.Services.CreateScope())
 //{
